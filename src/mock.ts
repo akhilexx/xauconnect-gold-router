@@ -63,3 +63,18 @@ export function mockFetch(tokens: Token[], mock = new MockOneClick(tokens)) {
     return new Response(JSON.stringify({ message: "not found" }), { status: 404 });
   };
 }
+
+/** fetch() stand-in for XAUConnect POST /api/swap/quote in MOCK mode: price-only, flat 40 bps. NOT a real quote. */
+export function mockXauFetch(tokens: Token[], feeBps = 40) {
+  return async (_url: string, init?: RequestInit): Promise<Response> => {
+    const b = JSON.parse(String(init?.body)) as { tokenIn: string; tokenOut: string; amountIn: string; slippageBps: number };
+    const find = (a: string) => tokens.find((t) => (t.contractAddress ?? "").toLowerCase() === a.toLowerCase());
+    const tin = find(b.tokenIn), tout = find(b.tokenOut);
+    if (!tin || !tout) return new Response(JSON.stringify({ error: { code: "UNSUPPORTED_TOKEN" } }), { status: 400 });
+    const outUsd = Number(fromBaseUnits(b.amountIn, tin.decimals)) * tin.price * (1 - feeBps / 10_000);
+    const out = BigInt(Math.floor((outUsd / tout.price) * 10 ** tout.decimals));
+    const best = { dexId: "mock", dexName: "mock", protocol: "mock", amountOut: out.toString(), amountOutAfterFee: out.toString(), protocolFee: "0", priceImpactBps: 0, path: [], simulated: false, executable: true };
+    const min = (out * BigInt(10_000 - b.slippageBps)) / 10_000n;
+    return new Response(JSON.stringify({ request: b, quotes: [best], best, protocolFeeBps: 0, minAmountOut: min.toString(), quotedAt: Date.now() }));
+  };
+}

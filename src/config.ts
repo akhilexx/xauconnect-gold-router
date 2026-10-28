@@ -4,6 +4,8 @@ import { MockOneClick } from "./mock.ts";
 import { TokenRegistry } from "./registry.ts";
 import { policyFromEnv } from "./policy.ts";
 import type { Token } from "./types.ts";
+import { mockXauFetch } from "./mock.ts";
+import { xauProviderFromEnv, type QuoteProvider } from "./xauconnect-quote.ts";
 
 /** Load KEY=VALUE pairs from .env if present (no dependency on dotenv). */
 export function loadEnv(path = ".env"): void {
@@ -19,9 +21,13 @@ export async function buildDeps(env = process.env) {
   const policy = policyFromEnv(env);
   if (mock) {
     const tokens: Token[] = JSON.parse(readFileSync(new URL("../fixtures/tokens.json", import.meta.url), "utf8"));
-    return { mock, policy, registry: new TokenRegistry(tokens), client: new MockOneClick(tokens) };
+    const xau = xauProviderFromEnv(env, mockXauFetch(tokens));
+    const providers: QuoteProvider[] = xau ? [xau] : [];
+    return { mock, policy, registry: new TokenRegistry(tokens), client: new MockOneClick(tokens), providers };
   }
   const client = new OneClickClient({ baseUrl: env.ONECLICK_BASE_URL, jwt: env.ONECLICK_JWT });
   const registry = new TokenRegistry(await client.tokens());
-  return { mock, policy, registry, client };
+  const xau = xauProviderFromEnv(env);
+  const providers: QuoteProvider[] = xau ? [xau] : [];
+  return { mock, policy, registry, client, providers };
 }

@@ -85,13 +85,16 @@ export interface RouteOption {
   timeEstimateSec: number;
   costBps: number; // (in - out) / in, in basis points, includes all fees + price impact
   signature: string;
-  provider: "near-intents-1click";
+  provider: "near-intents-1click" | "xauconnect";
+  /** xauconnect legs only: where the user completes the swap with their own wallet. */
+  handoffUrl?: string;
 }
 
 export interface RouteFailure {
   source: Source;
   delivery: Delivery;
   error: string;
+  provider?: RouteOption["provider"];
 }
 
 export interface RoutePlan {

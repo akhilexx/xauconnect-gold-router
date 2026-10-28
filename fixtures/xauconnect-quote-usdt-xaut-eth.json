@@ -1,0 +1,44 @@
+{
+  "_note": "Schema-shaped fixture (AggregatedQuoteSchema, packages/utils/src/schemas.ts at XAUConnect public main 73c354c). Values are illustrative, NOT a recorded live response. Venue names are placeholders and are dropped by the mapper. The echoed request field is omitted (the mapper does not read it); the request is USDT -> XAUT on ethereum, amountIn 100000000 (100 USDT), slippageBps 50.",
+  "quotes": [
+    {
+      "dexId": "venue-a",
+      "dexName": "Venue A",
+      "protocol": "v3",
+      "amountOut": "24735",
+      "amountOutAfterFee": "24673",
+      "protocolFee": "62",
+      "priceImpactBps": 4,
+      "path": [],
+      "simulated": false,
+      "executable": true
+    },
+    {
+      "dexId": "venue-b",
+      "dexName": "Venue B",
+      "protocol": "v2",
+      "amountOut": "24690",
+      "amountOutAfterFee": "24628",
+      "protocolFee": "62",
+      "priceImpactBps": 9,
+      "path": [],
+      "simulated": false,
+      "executable": true
+    }
+  ],
+  "best": {
+    "dexId": "venue-a",
+    "dexName": "Venue A",
+    "protocol": "v3",
+    "amountOut": "24735",
+    "amountOutAfterFee": "24673",
+    "protocolFee": "62",
+    "priceImpactBps": 4,
+    "path": [],
+    "simulated": false,
+    "executable": true
+  },
+  "protocolFeeBps": 25,
+  "minAmountOut": "24549",
+  "quotedAt": 1761700000000
+}

@@ -29,7 +29,7 @@ export const STALE_MS = 60_000;
 
 export type ExecCode =
   | "CONFIRM_REQUIRED" | "EXECUTION_DISABLED" | "UNKNOWN_PLAN" | "UNKNOWN_LEG" | "ALREADY_PREPARED"
-  | "POLICY" | "PRICE_MOVED" | "AMOUNT_MISMATCH" | "NO_DEPOSIT_ADDRESS" | "UNSUPPORTED_ORIGIN";
+  | "POLICY" | "PRICE_MOVED" | "AMOUNT_MISMATCH" | "NO_DEPOSIT_ADDRESS" | "UNSUPPORTED_ORIGIN" | "HANDOFF_ONLY";
 
 export class ExecutionError extends Error {
   code: ExecCode;
@@ -119,6 +119,8 @@ export async function prepareLegDeposit(
   const { plan, prepared } = entry;
   const leg = plan.legs[legIndex];
   if (!leg) throw new ExecutionError("UNKNOWN_LEG", `plan has no leg ${legIndex}`);
+  if (leg.provider !== "near-intents-1click")
+    throw new ExecutionError("HANDOFF_ONLY", `leg ${legIndex} is a same-chain XAU Route: complete it at ${leg.handoffUrl ?? "https://xauconnect.com/swap"} with your own wallet`);
   if (prepared.has(legIndex)) throw new ExecutionError("ALREADY_PREPARED", `leg ${legIndex} already has a deposit address`);
 
   // Policy is re-checked now: limits may have been tightened since planning.

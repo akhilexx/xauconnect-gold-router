@@ -1,5 +1,6 @@
-// Multi-chain router: fan out dry quotes on NEAR Intents for every (source, delivery) pair,
-// rank them by net value delivered, and return one best leg per source plus alternatives.
+// Multi-chain router: fan out dry quotes on NEAR Intents (plus optional comparison providers such as
+// XAUConnect same-chain) for every (source, delivery) pair, rank them by cost then ETA,
+// and return one best leg per source plus alternatives.
 
 import { randomUUID } from "node:crypto";
 import type { OneClickClient } from "./oneclick.ts";
@@ -7,6 +8,7 @@ import { checkOutput, checkSource, type Policy } from "./policy.ts";
 import type { TokenRegistry } from "./registry.ts";
 import type { QuoteRequest, RouteFailure, RouteIntent, RouteOption, RoutePlan } from "./types.ts";
 import { toBaseUnits } from "./units.ts";
+import type { QuoteProvider } from "./xauconnect-quote.ts";
 
 export interface RouterDeps {
   client: Pick<OneClickClient, "quote">;
@@ -15,6 +17,8 @@ export interface RouterDeps {
   now?: () => Date;
   quoteTtlMs?: number;
   referral?: string;
+  /** Extra comparison providers (e.g. XAUConnect same-chain). Each failure is recorded, never fatal. */
+  providers?: QuoteProvider[];
 }
 
 export async function planRoute(intent: RouteIntent, deps: RouterDeps): Promise<RoutePlan> {
@@ -88,9 +92,25 @@ export async function planRoute(intent: RouteIntent, deps: RouterDeps): Promise<
               provider: "near-intents-1click",
             });
           },
-          (e: Error) => { failures.push({ source, delivery, error: e.message }); },
+          (e: Error) => { failures.push({ source, delivery, error: e.message, provider: "near-intents-1click" }); },
         ),
       );
+      for (const p of deps.providers ?? []) {
+        const ctx = { source, delivery, inToken, outToken, slippageBps: slippage };
+        if (!p.supports(ctx)) continue;
+        jobs.push(
+          p.quote(ctx).then(
+            (o) => {
+              if (o.costBps > deps.policy.maxCostBps) {
+                failures.push({ source, delivery, provider: p.id, error: `cost ${o.costBps} bps exceeds policy max ${deps.policy.maxCostBps} bps` });
+                return;
+              }
+              options.push(o);
+            },
+            (e: Error) => { failures.push({ source, delivery, provider: p.id, error: e.message }); },
+          ),
+        );
+      }
     }
   }
 
