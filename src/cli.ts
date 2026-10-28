@@ -9,6 +9,7 @@ import { buildDeps, loadEnv } from "./config.ts";
 import { formatPlan } from "./format.ts";
 import { OneClickClient } from "./oneclick.ts";
 import { planRoute } from "./router.ts";
+import { goldCurveIntent, RECIPES, type RecipeId } from "./goldcurve.ts";
 import type { Delivery, RecipientType, Source } from "./types.ts";
 
 const EVM = new Set(["eth", "arb", "base", "op", "pol", "bsc", "avax", "gnosis", "bera", "scroll", "monad", "xlayer", "abs", "plasma"]);
@@ -70,12 +71,27 @@ async function main() {
     console.log(json ? JSON.stringify(plan, null, 2) : `${deps.mock ? "[MOCK MODE: simulated quotes]\n" : ""}${formatPlan(plan)}`);
     return;
   }
+  if (cmd === "goldcurve") {
+    // goldcurve --mint MINT --recipe fair-sol --wallet SOLANA_ADDR --from AMT:SYM:CHAIN[:REFUND] ...
+    const get = (k: string) => { const i = rest.indexOf(k); return i >= 0 ? rest[i + 1] : undefined; };
+    const mint = get("--mint"), recipe = (get("--recipe") ?? "fair-sol") as RecipeId, wallet = get("--wallet") ?? process.env.RECIPIENT_SOL;
+    if (!mint || !wallet) throw new Error(`usage: goldcurve --mint MINT --recipe ${Object.keys(RECIPES).join("|")} --wallet SOLANA_ADDR --from AMT:SYM:CHAIN[:REFUND] ...`);
+    const fromArgs: string[] = [];
+    rest.forEach((a, i) => { if (a === "--from") fromArgs.push("--from", rest[i + 1]); });
+    const { intent: base } = parseArgs([...fromArgs, "--to", `SOL:sol:DESTINATION_CHAIN:${wallet}`]);
+    const { intent, quote, handoffUrl } = goldCurveIntent({ mint, recipe, solanaWallet: wallet, sources: base.sources });
+    const deps = await buildDeps();
+    const plan = await planRoute(intent, { ...deps, referral: process.env.REFERRAL });
+    console.log(`${deps.mock ? "[MOCK MODE: simulated quotes]\n" : ""}Gold Curve funding (${recipe}, quote ${quote}) for mint ${mint}\n${formatPlan(plan)}`);
+    console.log(`Next: buy on the existing XAUConnect token page with your Solana wallet: ${handoffUrl}`);
+    return;
+  }
   if (cmd === "status") {
     const c = new OneClickClient({ baseUrl: process.env.ONECLICK_BASE_URL, jwt: process.env.ONECLICK_JWT });
     console.log(JSON.stringify(await c.status(rest[0], rest[1]), null, 2));
     return;
   }
-  console.log("usage: cli.ts tokens [SYMBOL] | plan --from AMT:SYM:CHAIN[:REFUND] ... --to SYM:CHAIN[:DESTINATION_CHAIN|INTENTS[:RECIPIENT]] ... [--slippage BPS] [--json] | status DEPOSIT_ADDRESS");
+  console.log("usage: cli.ts tokens [SYMBOL] | goldcurve --mint MINT --recipe RECIPE --wallet SOL_ADDR --from ... | plan --from AMT:SYM:CHAIN[:REFUND] ... --to SYM:CHAIN[:DESTINATION_CHAIN|INTENTS[:RECIPIENT]] ... [--slippage BPS] [--json] | status DEPOSIT_ADDRESS");
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
