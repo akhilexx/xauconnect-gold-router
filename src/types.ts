@@ -98,6 +98,7 @@ export interface RoutePlan {
   intentId: string;
   createdAt: string;
   dry: true;
+  slippageBps?: number; // slippage the legs were quoted with (execute re-uses it)
   legs: RouteOption[]; // best option per source
   alternatives: RouteOption[]; // every other quoted option, ranked
   failures: RouteFailure[];

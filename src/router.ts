@@ -113,6 +113,7 @@ export async function planRoute(intent: RouteIntent, deps: RouterDeps): Promise<
     intentId: randomUUID(),
     createdAt: now().toISOString(),
     dry: true,
+    slippageBps: slippage,
     legs, alternatives, failures, rejected,
     totals: {
       amountInUsd: round2(inUsd), amountOutUsd: round2(outUsd),
