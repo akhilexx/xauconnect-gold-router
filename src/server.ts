@@ -9,6 +9,9 @@
 //   POST /v1/xau/cross-chain/quote      XAUConnect-shaped dry quote via the NEAR Intents venue adapter
 //   POST /v1/goldcurve/fund             "Fund from another chain": recipe -> dry quote -> hand-off
 //   POST /v1/xau/swap/cross-chain/near-intents/quote|build   the exact handlers patch 0005 ships to XAUConnect
+//   GET  /.well-known/agent-tools.json  agent tool manifest (4 read-only tools + JSON Schemas)
+//   POST /v1/agent/tools/:name          Authorization: Bearer <agent key>; per-key daily budget + output allow-list
+//   GET  /v1/agent/audit                the calling agent's audit entries
 //   GET  /               demo page
 //
 // DEMO_PUBLIC=1 (hosted demo, docs/HOSTED-DEMO.md): execute, deposit submit and build are hard-off (403
@@ -27,6 +30,7 @@ import type { CrossChainQuoteInput } from "./xauconnect/near-intents.ts";
 import { planFunding } from "./xauconnect/fund-curve.ts";
 import { createXauNearIntentsHandlers } from "./xauconnect/near-intents-xau.ts";
 import type { FundingInput } from "./xauconnect/fund-curve.ts";
+import { AuditLog, agentKeysFromEnv, agentToolsManifest, createAgentTools } from "./agent.ts";
 
 export function venueFromEnv(env: Record<string, string | undefined>, mockTokens?: Token[]): NearIntentsVenue {
   // In this repo the venue is on unless NEAR_INTENTS_ENABLED=false; in XAUConnect it defaults off.
@@ -64,6 +68,15 @@ export async function startServer(port = Number(process.env.PORT ?? 8787)) {
   const demo = isDemoPublic(process.env);
   if (demo && process.env.EXECUTION_ENABLED) throw new Error("DEMO_PUBLIC=1 must not be combined with EXECUTION_ENABLED");
   const allow = rateLimiter(Number(process.env.DEMO_RATE_PER_MIN || 30));
+  const agentTools = createAgentTools({
+    registry: deps.registry, policy: deps.policy,
+    planRoute: (intent, policy) => planRoute(intent, { ...deps, policy, referral: process.env.REFERRAL }),
+    fundQuote: (body) => venue.quote(body),
+    status: (addr, memo) => statusClient.status(addr, memo),
+    keys: agentKeysFromEnv(process.env),
+    audit: new AuditLog(process.env.AGENT_AUDIT_LOG || undefined),
+  });
+  const manifest = agentToolsManifest();
   // Prefill the demo page with the configured public demo address, if any.
   const demoAddr = process.env.RECIPIENT_EVM && /^0x[0-9a-fA-F]{40}$/.test(process.env.RECIPIENT_EVM) ? process.env.RECIPIENT_EVM : null;
   let page = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
@@ -118,6 +131,18 @@ export async function startServer(port = Number(process.env.PORT ?? 8787)) {
         try { plan = planFunding(await readJson<FundingInput>()); } catch (e) { return send(400, { error: (e as Error).message }); }
         const quote = await venue.quote(plan.body);
         return send(200, { ...plan, quote, handoffUrl: `https://xauconnect.com${plan.handoffPath}` });
+      }
+      if (req.method === "GET" && url.pathname === "/.well-known/agent-tools.json") return send(200, manifest);
+      const tool = req.method === "POST" ? url.pathname.match(/^\/v1\/agent\/tools\/([a-z_]{1,40})$/) : null;
+      if (tool) {
+        let args: unknown;
+        try { args = await readJson<unknown>(); } catch { return send(400, { error: "body must be JSON", code: "INVALID_ARGUMENTS" }); }
+        const r = await agentTools.call(tool[1]!, req.headers.authorization, args);
+        return send(r.status, r.json);
+      }
+      if (req.method === "GET" && url.pathname === "/v1/agent/audit") {
+        const r = agentTools.audit(req.headers.authorization);
+        return send(r.status, r.json);
       }
       if (req.method === "GET" && url.pathname === "/") return send(200, page, "text/html");
       if (req.method === "GET" && url.pathname === "/health") return send(200, { ok: true, mock: deps.mock, demoPublic: demo, executionEnabled: !demo && process.env.EXECUTION_ENABLED === "1", policy: deps.policy });
