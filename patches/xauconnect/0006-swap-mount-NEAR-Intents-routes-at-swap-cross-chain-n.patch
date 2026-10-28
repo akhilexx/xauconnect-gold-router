@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akhilesh Patil <70477748+akhilexx@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 03:50:32 +0530
+Subject: [PATCH 6/6] swap: mount NEAR Intents routes at
+ /swap/cross-chain/near-intents; backend test script
+
+Two-line mount; existing /cross-chain/quote, /build and /status are untouched.
+---
+ backend/package.json       | 1 +
+ backend/src/routes/swap.ts | 4 ++++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/backend/package.json b/backend/package.json
+index d2e1427..8dfb5ef 100644
+--- a/backend/package.json
++++ b/backend/package.json
+@@ -7,6 +7,7 @@
+     "dev": "tsx watch src/index.ts",
+     "build": "tsc -p tsconfig.json",
+     "start": "node dist/index.js",
++    "test": "tsx --test src/services/routing/near-intents.test.ts src/services/routing/near-intents-xau.test.ts",
+     "typecheck": "prisma generate --schema ../prisma/schema.prisma && tsc --noEmit",
+     "db:generate": "prisma generate --schema ../prisma/schema.prisma",
+     "db:migrate": "prisma migrate dev --schema ../prisma/schema.prisma",
+diff --git a/backend/src/routes/swap.ts b/backend/src/routes/swap.ts
+index c3e4af1..d283e7c 100644
+--- a/backend/src/routes/swap.ts
++++ b/backend/src/routes/swap.ts
+@@ -22,6 +22,7 @@ import {
+   quoteCrossChain,
+   status0xCrossChain,
+ } from "../services/routing/cross-chain.js";
++import { nearIntentsRouter } from "./near-intents.js";
+ import { submitSignedSolanaTransaction } from "../services/solana-submit.js";
+ import { SolanaSubmitError } from "../services/solana-errors.js";
+ import { db } from "../db/client.js";
+@@ -115,6 +116,9 @@ swapRouter.get("/allowance", standardLimiter, asyncHandler(async (req, res) => {
+   res.json({ allowance, token, owner, spender, chainKey });
+ }));
+ 
++/** NEAR Intents venue (shown as "XAU Route"); off unless NEAR_INTENTS_ENABLED=true. See routes/near-intents.ts. */
++swapRouter.use("/cross-chain/near-intents", nearIntentsRouter);
++
+ /** Cross-chain quote (0x Cross-Chain API + 1inch Fusion+ fallback). */
+ swapRouter.post(
+   "/cross-chain/quote",

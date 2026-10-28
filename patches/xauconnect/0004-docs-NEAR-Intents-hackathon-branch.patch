@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Akhilesh Patil <70477748+akhilexx@users.noreply.github.com>
-Date: Wed, 28 Oct 2026 22:39:01 +0530
-Subject: [PATCH 4/4] docs: NEAR Intents hackathon branch
+Date: Thu, 29 Oct 2026 03:50:32 +0530
+Subject: [PATCH 4/6] docs: NEAR Intents hackathon branch
 
 ---
  docs/NEAR_INTENTS.md | 50 ++++++++++++++++++++++++++++++++++++++++++++

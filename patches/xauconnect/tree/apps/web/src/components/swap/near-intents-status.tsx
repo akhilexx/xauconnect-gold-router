@@ -11,7 +11,7 @@ export function NearIntentsStatus(props: { quoteId: string; apiBase: string; onD
   useEffect(() => {
     const ac = new AbortController();
     const get = async () => {
-      const r = await fetch(`${props.apiBase}/swap/cross-chain/status/${encodeURIComponent(props.quoteId)}`, { signal: ac.signal });
+      const r = await fetch(`${props.apiBase}/swap/cross-chain/near-intents/status/${encodeURIComponent(props.quoteId)}`, { signal: ac.signal });
       if (!r.ok) throw new Error(String(r.status));
       return (await r.json()) as { status: string };
     };

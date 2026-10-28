@@ -2,8 +2,8 @@
  * "Fund from another chain" panel for a Gold Curve token page.
  * Target path: apps/web/src/components/launchpad/fund-from-another-chain.tsx
  * NOT tested in the router repo. Side effects come in as props so it fits the app's API client and wallets:
- *   getQuote   -> POST /swap/cross-chain/quote  (venue near-intents, dry)
- *   onConfirm  -> POST /swap/cross-chain/build {quoteRef, confirm:true}, then deposit.ts sendEvmDeposit
+ *   getQuote   -> POST /swap/cross-chain/near-intents/quote  (venue near-intents, dry)
+ *   onConfirm  -> POST /swap/cross-chain/near-intents/build {quoteRef, confirm:true}, then deposit.ts sendEvmDeposit
  * After delivery the user buys with the existing Gold Curve buy widget on the same page.
  */
 import { useMemo, useState } from "react";
@@ -42,7 +42,7 @@ export function FundFromAnotherChain(props: {
       if (!want || !props.solanaWallet || !props.evmAddress) return null;
       return planFunding({
         mint: props.mint, poolConfig: props.poolConfig, connectedWallet: props.solanaWallet,
-        from: { chain: chain as CrossChainQuoteBody["fromChain"], token: USDC_BY_CHAIN[chain], sender: props.evmAddress },
+        from: { chain: chain as CrossChainQuoteBody["fromChain"], token: USDC_BY_CHAIN[chain] ?? "", sender: props.evmAddress },
         want, raisedSoFar: props.raisedSoFar,
       });
     } catch (e) { return { error: (e as Error).message } as const; }

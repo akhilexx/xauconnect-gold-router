@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import {
   CHAIN_TO_ONECLICK, NearIntentsVenue, USER_ERRORS, createNearIntentsHandlers, erc20TransferData, fromOneClickChain,
   nearIntentsConfigFromEnv, toOneClickChain, type XauChainKey,
-} from "./near-intents";
+} from "./near-intents.js";
 
 const TOKENS = [
   { assetId: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near", blockchain: "arb", symbol: "USDC", decimals: 6, contractAddress: "0xaf88d065e77c8cc2239327c5edb3a432268e5831" },

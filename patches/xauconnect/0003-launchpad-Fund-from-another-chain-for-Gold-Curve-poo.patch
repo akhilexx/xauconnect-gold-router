@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Akhilesh Patil <70477748+akhilexx@users.noreply.github.com>
-Date: Wed, 28 Oct 2026 22:39:01 +0530
-Subject: [PATCH 3/4] launchpad: Fund from another chain for Gold Curve pools
+Date: Thu, 29 Oct 2026 03:50:32 +0530
+Subject: [PATCH 3/6] launchpad: Fund from another chain for Gold Curve pools
 
 ---
  .../launchpad/fund-from-another-chain.tsx     |  86 ++++++++++++
@@ -12,7 +12,7 @@ Subject: [PATCH 3/4] launchpad: Fund from another chain for Gold Curve pools
 
 diff --git a/apps/web/src/components/launchpad/fund-from-another-chain.tsx b/apps/web/src/components/launchpad/fund-from-another-chain.tsx
 new file mode 100644
-index 0000000..916b594
+index 0000000..ab2c3bc
 --- /dev/null
 +++ b/apps/web/src/components/launchpad/fund-from-another-chain.tsx
 @@ -0,0 +1,86 @@
@@ -20,8 +20,8 @@ index 0000000..916b594
 + * "Fund from another chain" panel for a Gold Curve token page.
 + * Target path: apps/web/src/components/launchpad/fund-from-another-chain.tsx
 + * NOT tested in the router repo. Side effects come in as props so it fits the app's API client and wallets:
-+ *   getQuote   -> POST /swap/cross-chain/quote  (venue near-intents, dry)
-+ *   onConfirm  -> POST /swap/cross-chain/build {quoteRef, confirm:true}, then deposit.ts sendEvmDeposit
++ *   getQuote   -> POST /swap/cross-chain/near-intents/quote  (venue near-intents, dry)
++ *   onConfirm  -> POST /swap/cross-chain/near-intents/build {quoteRef, confirm:true}, then deposit.ts sendEvmDeposit
 + * After delivery the user buys with the existing Gold Curve buy widget on the same page.
 + */
 +import { useMemo, useState } from "react";
@@ -60,7 +60,7 @@ index 0000000..916b594
 +      if (!want || !props.solanaWallet || !props.evmAddress) return null;
 +      return planFunding({
 +        mint: props.mint, poolConfig: props.poolConfig, connectedWallet: props.solanaWallet,
-+        from: { chain: chain as CrossChainQuoteBody["fromChain"], token: USDC_BY_CHAIN[chain], sender: props.evmAddress },
++        from: { chain: chain as CrossChainQuoteBody["fromChain"], token: USDC_BY_CHAIN[chain] ?? "", sender: props.evmAddress },
 +        want, raisedSoFar: props.raisedSoFar,
 +      });
 +    } catch (e) { return { error: (e as Error).message } as const; }
@@ -104,7 +104,7 @@ index 0000000..916b594
 +}
 diff --git a/apps/web/src/lib/near-intents/fund-curve.ts b/apps/web/src/lib/near-intents/fund-curve.ts
 new file mode 100644
-index 0000000..7a9adc5
+index 0000000..57b95a8
 --- /dev/null
 +++ b/apps/web/src/lib/near-intents/fund-curve.ts
 @@ -0,0 +1,126 @@
@@ -113,7 +113,7 @@ index 0000000..7a9adc5
 + *
 + * Target path in the XAUConnect repo: apps/web/src/lib/near-intents/fund-curve.ts
 + * Self-contained (no imports). Pure logic: pool config -> recipe -> quote token, the body for
-+ * POST /swap/cross-chain/quote, the graduation warning, and the hand-off to the existing buy
++ * POST /swap/cross-chain/near-intents/quote, the graduation warning, and the hand-off to the existing buy
 + * widget. The buy itself stays the existing Gold Curve flow, signed in the user's Solana wallet.
 + */
 +
@@ -150,7 +150,7 @@ index 0000000..7a9adc5
 +
 +export function toBase(amount: string, decimals: number): string {
 +  if (!/^\d+(\.\d+)?$/.test(amount)) throw new Error(`bad amount ${amount}`);
-+  const [w, f = ""] = amount.split(".");
++  const [w = "0", f = ""] = amount.split(".");
 +  if (f.length > decimals) throw new Error(`${amount} has more than ${decimals} decimals`);
 +  return (BigInt(w) * 10n ** BigInt(decimals) + BigInt(f.padEnd(decimals, "0") || "0")).toString();
 +}
@@ -172,7 +172,7 @@ index 0000000..7a9adc5
 +  return { remaining, share, warning };
 +}
 +
-+/** Body for XAUConnect's POST /swap/cross-chain/quote with the NEAR Intents venue. */
++/** Body for XAUConnect's POST /swap/cross-chain/near-intents/quote with the NEAR Intents venue. */
 +export interface CrossChainQuoteBody {
 +  fromChain: "ethereum" | "bsc" | "polygon" | "arbitrum" | "base" | "avalanche" | "solana";
 +  toChain: "solana";

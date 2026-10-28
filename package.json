@@ -14,7 +14,8 @@
     "plan": "node src/cli.ts plan",
     "tokens": "node src/cli.ts tokens",
     "fund": "node src/cli.ts fund",
-    "patches": "scripts/build-xau-patches.sh"
+    "patches": "scripts/build-xau-patches.sh",
+    "typecheck:xau": "scripts/typecheck-xau-mirror.sh"
   },
   "author": "Akhilesh Patil (https://github.com/akhilexx)",
   "repository": {

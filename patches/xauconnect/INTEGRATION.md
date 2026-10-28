@@ -1,148 +1,111 @@
 # Hand edits to existing XAUConnect files
 
-The router repo's box has no copy of the XAUConnect source. That means the edits below are **not
-diffs against real code**. They are snippets with "find this anchor" instructions, built from the
-documented paths and behaviour in `docs/SWAP_EXECUTION.md` and the factsheet, which says the
-backend is Express and the web app is Next.js 15. Function and variable names inside these files
-are guesses and marked `ADAPT`. Apply them on branch `near-intents-hackathon` after `git am`
-has added the new files.
+**Verified against public `akhilexx/xauconnect` main `73c354c`** (2026-10-19 01:30 IST, the last commit
+before the hackathon announcement). Read on 29 Oct 2026 through the GitHub contents API. Every anchor
+below was found in those exact bytes. If the owner's Mac copy has moved past `73c354c`, re-check the
+anchors there first.
 
-Order: 1 → 2 → 3 → 4 → 5 → 6. Run `pnpm -w typecheck` (or the repo's equivalent) after each one.
+Most of the wiring is now in real patches, so only **three** hand edits are left:
 
-## 1. `.env.example` (repo root)
+| Was (28 Oct, written blind) | Now |
+|---|---|
+| §2 edit `cross-chain.ts` | **Dropped.** `CrossChainQuoteSchema.provider` is `z.enum(["0x-cross-chain","1inch-fusion-plus"])` in `packages/utils/src/schemas.ts`, and `/cross-chain/build` validates against it. Putting the venue into `quoteCrossChain()` would mean widening a shared schema that the existing `buildCrossChain()` dispatch also relies on. The venue gets its own sub-router instead, and existing routes stay unchanged |
+| §3 edit `routes/swap.ts` | **Patch 0006** (real diff, applies with plain `git am`): one import, plus `swapRouter.use("/cross-chain/near-intents", nearIntentsRouter)` |
+| §4 `user-errors.ts` | **Dropped.** The sub-router returns the backend's own `{error:{code,message}}` envelope, using `NEAR_INTENTS_*` codes and copy that is already safe to show users (it passes the `INTERNAL_MARKERS` regex in both user-errors files) |
+| backend had no test runner | **Patch 0006** adds `"test": "tsx --test …"` to `backend/package.json` (`tsx` is already a devDependency) |
 
-Append:
+Bugs that were found by checking against the real compiler settings, and are now fixed:
+- `backend/tsconfig.json` uses `module`/`moduleResolution: NodeNext`, and CI runs `pnpm typecheck` and `pnpm build`. Because of that, the shipped test's extensionless `import … from "./near-intents"` would have failed CI. It is now `./near-intents.js`.
+- `tsconfig.base.json` has `noUncheckedIndexedAccess: true`. That turned up three `string | undefined` errors (in `near-intents.ts` status/submit and `fund-curve.ts` toBase, and in `fund-from-another-chain.tsx`). All three are fixed.
+- `scripts/typecheck-xau-mirror.sh` now type-checks the whole patch tree with those exact settings, against the real neighbouring files (`middleware/error.ts`, `lib/user-errors.ts`, `utils/schemas.ts`, `utils/chains.ts`, all byte-identical). It also proves at compile time that our request, quote and build shapes are assignable to the real `CrossChainQuoteRequest`, `CrossChainQuote` and `CrossChainBuild`, with `provider` as the only exception.
+
+## 1. `.env.example` (repo root), append
+
+`.env.example` was not opened, on purpose (we don't touch env files). Append this block by hand:
 
 ```dotenv
 # NEAR Intents venue for cross-chain XAU Routes (hackathon branch). Off by default.
 NEAR_INTENTS_ENABLED=false
-# 1 lets /swap/cross-chain/build request a real deposit address (each build still needs confirm:true)
+# 1 lets /swap/cross-chain/near-intents/build request a real deposit address (each build still needs confirm:true)
 NEAR_INTENTS_EXECUTION_ENABLED=
 ONECLICK_BASE_URL=https://1click.chaindefuser.com
 # Optional. Without it 1Click adds a 0.2% fee. Never commit a real value.
 ONECLICK_JWT=
 NEAR_INTENTS_REFERRAL=xauconnect
 ONECLICK_TIMEOUT_MS=8000
+NEXT_PUBLIC_NEAR_INTENTS_ENABLED=false
 ```
 
-## 2. `backend/src/services/routing/cross-chain.ts`
+`backend/src/routes/near-intents.ts` reads these from `process.env`. `backend/src/config.ts` doesn't need
+any changes because the venue doesn't go through its zod env schema.
 
-Anchor: the function that builds the list of cross-chain quotes (behind `POST /swap/cross-chain/quote`).
+## 2. `apps/web/src/components/swap/swap-panel.tsx`: offer the XAU Route for cross-chain pairs (optional for the demo)
 
-```ts
-import { NearIntentsVenue, nearIntentsConfigFromEnv, createNearIntentsHandlers } from "./near-intents";
+Verified anchors: `crossChainRequest` (a `useMemo`, ~line 423) builds a real `CrossChainQuoteRequest`;
+`crossChainQuoteQuery` (~463) calls `api.crossChainQuote`; `executeCrossChain()` (~700) runs execution.
 
-export const nearIntents = new NearIntentsVenue(nearIntentsConfigFromEnv(process.env));
-export const nearIntentsHandlers = createNearIntentsHandlers(nearIntents);
-```
+1. Add a second query for the cross-chain request, behind `process.env.NEXT_PUBLIC_NEAR_INTENTS_ENABLED === "true"`:
+   ```ts
+   const nearQuoteQuery = useQuery({
+     queryKey: ["near-intents-quote", crossChainRequest],
+     enabled: nearEnabled && Boolean(crossChainRequest),
+     queryFn: async () => {
+       const r = await fetch(`${API_URL}/swap/cross-chain/near-intents/quote`, {
+         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(crossChainRequest),
+       });
+       if (!r.ok) return null;
+       return (await r.json()) as { quoteRef: string; crossChainQuote: CrossChainQuote & { provider: string } };
+     },
+   });
+   ```
+   `API_URL` comes from `@/lib/api`. Show the result as one more route row labelled `crossChainQuote.bridgeName`
+   (`"XAU Route"`). Never name the venue in the UI.
+2. If the user picks that row, **do not** send it through `submitEvmCrossChainBuilt()`. That function runs an
+   ERC-20 `approve(built.evm.to, amount)` before it sends. For our build, `evm.to` is the token contract itself
+   and `data` is a plain `transfer` to the deposit address, so no approval is needed and one would be wrong.
+   Use this instead:
+   ```ts
+   const b = await fetch(`${API_URL}/swap/cross-chain/near-intents/build`, { method: "POST",
+     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteRef, confirm: true }) }).then((r) => r.json());
+   if (b.error) throw new Error(b.error.message);
+   await ensureEvmChain(fromChainKey);
+   const hash = await sendEvmDeposit(b.deposit, (tx) => sendTransactionAsync(tx));   // lib/near-intents/deposit
+   await reportDeposit(API_URL, b.deposit.quoteId, hash).catch(() => {});           // optional speed-up
+   // then render <NearIntentsStatus quoteId={b.deposit.quoteId} apiBase={API_URL} />
+   ```
+   For a Solana origin, use `sendSolanaDeposit(...)` with the panel's existing `/swap/submit-solana` submitter.
+   The build returns no `solanaTransaction`, because the backend builds no Solana transactions for this venue.
+3. `confirm: true` must only be sent from the Swap button's click handler, never on render or on refetch.
 
-If cross-chain.ts gathers quotes from several venues into one list, add NEAR Intents as one more
-candidate **only when `nearIntents.enabled`**. Map the existing request to `CrossChainQuoteInput`.
-ADAPT the field names:
+## 3. Gold Curve token page: Fund from another chain
 
-```ts
-// ADAPT: req.fromChain/req.toChain are XAUConnect chain keys (ethereum|bsc|polygon|arbitrum|base|avalanche|solana)
-if (nearIntents.enabled) {
-  candidates.push(
-    nearIntentsHandlers.quote({
-      fromChain: req.fromChain, toChain: req.toChain, tokenIn: req.tokenIn, tokenOut: req.tokenOut,
-      amount: req.amountIn /* base units */, slippageBps: req.slippageBps, sender: req.fromAddress, recipient: req.toAddress,
-    }).then((r) => (r.status === 200 ? { venue: "near-intents", ...(r.json as object) } : null)),
-  );
-}
-```
+Verified anchors: `apps/web/src/app/(site)/token/[chainKey]/[address]/page.tsx` renders `TokenDetail`. In turn,
+`components/discover/token-detail.tsx` renders `<GoldCurvePanel chainKey={chainKey} address={address} />`
+(~line 195). `components/discover/gold-curve-panel.tsx` gets `curve: GoldCurveView` from `api.goldCurve(address)`.
+That `GoldCurveView` already has every input the panel needs: `config`, `raised`, `threshold`, `quoteSymbol`,
+`migrated`.
 
-Ranking: compare `quote.amountOutUsd` (or `quote.costBps`) with the existing cross-chain quotes.
-A quote from this venue keeps its `quoteRef`, and the build step must send it back.
-
-## 3. `backend/src/routes/swap.ts` (Express)
-
-Anchor: next to the existing `/swap/cross-chain/*` routes.
-
-```ts
-import { nearIntentsHandlers } from "../services/routing/cross-chain";
-
-// Explicit venue routes (simplest to review). The generic /swap/cross-chain/* routes can dispatch here when venue === "near-intents".
-router.post("/swap/cross-chain/near-intents/quote", async (req, res) => {
-  const r = await nearIntentsHandlers.quote(req.body);
-  res.status(r.status).json(r.json);
-});
-router.post("/swap/cross-chain/near-intents/build", async (req, res) => {
-  const r = await nearIntentsHandlers.build(req.body); // { quoteRef, confirm: true }
-  res.status(r.status).json(r.json);
-});
-router.post("/swap/cross-chain/submit-deposit", async (req, res) => {
-  const r = await nearIntentsHandlers.submitDeposit(req.body); // { quoteId, txHash, confirm: true }
-  res.status(r.status).json(r.json);
-});
-```
-
-In the existing `GET /swap/cross-chain/status/:quoteId` handler, add this branch before the
-current lookup. NEAR Intents quote ids are deposit addresses, optionally `addr|memo`. Mark them
-in the record (ADAPT) or try this venue when the id is not a known internal quote id:
-
-```ts
-if (isNearIntentsQuoteId(req.params.quoteId)) { // ADAPT: e.g. look up the venue saved by /api/swap/record
-  const r = await nearIntentsHandlers.status(req.params.quoteId);
-  return res.status(r.status).json(r.json);
-}
-```
-
-`/api/swap/record`: record NEAR Intents swaps with `venue: "near-intents"` and the deposit tx
-hash, the same way other swaps are recorded. That keeps volume and fee stats consistent.
-
-## 4. `backend/src/lib/user-errors.ts` and `apps/web/src/lib/user-errors.ts`
-
-The handlers already return `{ error, code }` with `error` taken from `USER_ERRORS` in
-near-intents.ts, and that copy never names a venue. If the app maps codes centrally, add these
-codes: `DISABLED, EXECUTION_DISABLED, CONFIRM_REQUIRED, UNSUPPORTED_CHAIN, UNSUPPORTED_TOKEN,
-AMOUNT_TOO_LOW, INVALID_ADDRESS, NO_ROUTE, PRICE_MOVED, AMOUNT_MISMATCH, QUOTE_EXPIRED, TIMEOUT,
-UPSTREAM`. Copy the strings from `USER_ERRORS` so backend and web stay identical.
-
-## 5. `apps/web/src/components/swap/swap-panel.tsx`
-
-Anchor: `executeCompositeCrossChain` (it calls `sendTransactionAsync({to,data,value})`).
-
-```ts
-import { sendEvmDeposit, sendSolanaDeposit, reportDeposit } from "@/lib/near-intents/deposit"; // ADAPT alias
-import { NearIntentsStatus } from "@/components/swap/near-intents-status";
-
-// when the selected cross-chain quote has venue === "near-intents":
-const built = await api.post("/swap/cross-chain/near-intents/build", { quoteRef: selected.quoteRef, confirm: true }); // ADAPT api client
-const ins = built.deposit;
-const txHash = ins.evm
-  ? await sendEvmDeposit(ins, sendTransactionAsync)            // no approve() needed: plain ERC-20 transfer
-  : await sendSolanaDeposit(ins, { payer: solanaPublicKey, getLatestBlockhash, signTransaction, submitSigned }); // ADAPT to existing Solana submit helper
-await reportDeposit(API_BASE, ins.quoteId, txHash).catch(() => {}); // optional speed-up
-setNearIntentsQuoteId(ins.quoteId); // render <NearIntentsStatus quoteId=... apiBase=API_BASE />
-```
-
-The confirm button must sit behind a visible review step: amount, receiving wallet, and "I
-reviewed" ticked. That step is where `confirm: true` comes from.
-
-## 6. Gold Curve token page
-
-Anchor: the token page that renders the existing Gold Curve buy panel
-(`/token/solana/<mint>`; the component is probably under `apps/web/src/components/launchpad/`
-or `apps/web/src/app/token/...`; ADAPT).
-
+In `GoldCurvePanel`, after `if (!curve) return null;`:
 ```tsx
-import { FundFromAnotherChain } from "@/components/launchpad/fund-from-another-chain";
-
-{pool.isGoldCurve && process.env.NEXT_PUBLIC_NEAR_INTENTS_ENABLED === "true" ? (
-  <FundFromAnotherChain
-    mint={mint} poolConfig={pool.config /* DBC config account */} raisedSoFar={pool.quoteRaised /* in SOL/USDC, ADAPT */}
-    solanaWallet={solanaAddress} evmAddress={evmAddress}
-    getQuote={(body) => api.post("/swap/cross-chain/near-intents/quote", body)}
-    onConfirm={async (quoteRef) => { /* same as step 5: build -> sendEvmDeposit -> reportDeposit -> status */ }}
-  />
-) : null}
+const nearEnabled = process.env.NEXT_PUBLIC_NEAR_INTENTS_ENABLED === "true";
+return (
+  <>
+    <GoldCurveCard curve={curve} />
+    {nearEnabled && !curve.migrated ? (
+      <FundFromAnotherChain mint={curve.mint} poolConfig={curve.config} raisedSoFar={Number(curve.raised)}
+        solanaWallet={solanaAddress} evmAddress={evmAddress} getQuote={postNearQuote} onConfirm={buildAndSend} />
+    ) : null}
+  </>
+);
 ```
+`solanaAddress` and `evmAddress` come from `hooks/use-active-wallet.ts`. `postNearQuote` posts to
+`/swap/cross-chain/near-intents/quote`. `buildAndSend` follows the same steps as §2.2.
 
-Add `NEXT_PUBLIC_NEAR_INTENTS_ENABLED=false` to the web env.
+Live check (29 Oct 03:51 IST, `GET https://xauconnect.com/api/launchpad/curve/HXXMuNxD…`): XAUGC is
+`preset: "fair"`, quote SOL, `config` `ExTrSGZB…`, threshold 10 SOL, raised 0.00014979 SOL, not migrated. That is
+the `fair-sol` recipe, and `recipeFromConfig()` resolves it (router test `fund-curve.test.ts`).
 
 ## Label
 
-User-facing label: **"XAU Route"**. The optional disclosure line **"XAU Route · settled on NEAR
-Intents"** (`SETTLEMENT_NOTE`, and `showSettlementNote` in the status component) needs the
-owner's OK before it is turned on.
+User-facing strings say only "XAU Route". The optional disclosure `SETTLEMENT_NOTE` ("settled on NEAR Intents")
+is shown only when `<NearIntentsStatus showSettlementNote />` is passed, and that **needs the owner's OK**.

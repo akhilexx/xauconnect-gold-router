@@ -41,3 +41,19 @@ no confirm -> HTTP 403
 Notes:
 - The BSC USDT leg was refused upstream with 'Temporary swap limits: minimum swap amount is $1,000'. The venue maps this to the AMOUNT_TOO_LOW user message, which doesn't name the venue.
 - The execute call on the live server returned 403 both without confirm and with confirm. EXECUTION_ENABLED was not set, so no dry:false request was made.
+
+## 29 Oct 2026, 03:53 IST (2026-10-28T22:23Z): through the XAUConnect-shaped handlers (`near-intents-xau.ts`)
+
+These are the same handlers that patch 0005 ships as `backend/src/services/routing/near-intents-xau.ts`. The script ran on the box with public addresses only, NEAR_INTENTS_ENABLED=true, and no execution flag.
+
+```
+quote  CrossChainQuoteRequest arbitrum USDC 40 -> solana SOL (taker 0xd8dA…6045, takerDestination ENob…Uabb)
+200 provider=near-intents bridgeName="XAU Route" amountIn=40000000 amountOut=390283408 (0.390283408 SOL)
+    minAmountOut=386380573 estimatedDurationSec=22 protocolFeeBps=0 raw.costBps=14 raw.dry=true
+build  {quoteRef, confirm:true} without NEAR_INTENTS_EXECUTION_ENABLED
+403 {"error":{"code":"NEAR_INTENTS_EXECUTION_DISABLED","message":"Cross-chain execution is switched off. You can still compare quotes."}}
+quote  base USDC 25 -> solana SOL
+200 provider=near-intents amountOut=243887980 (0.24388798 SOL) minAmountOut=241449100 estimatedDurationSec=32
+```
+
+No dry:false request was made and nothing was deposited or signed. These are dry quotes only, not executions.

@@ -4,7 +4,7 @@
  * Target path: apps/web/src/lib/near-intents/deposit.ts
  * NOT tested in the router repo (needs a wallet). Type-checked against @solana/web3.js 1.x.
  *
- * The backend returns unsigned DepositInstructions from POST /swap/cross-chain/build. This file only
+ * The backend returns unsigned DepositInstructions from POST /swap/cross-chain/near-intents/build. This file only
  * turns them into a wallet request. The user's wallet shows and signs it; nothing here holds keys.
  *   EVM:    pass wagmi's sendTransactionAsync (the same call executeCompositeCrossChain already uses).
  *   Solana: build a Transaction, wallet signTransaction, then the existing POST /swap/submit-solana path.
@@ -103,9 +103,9 @@ export async function sendSolanaDeposit(
 
 /** Optional: tell the backend the deposit hash so the route starts sooner. */
 export async function reportDeposit(apiBase: string, quoteId: string, txHash: string): Promise<{ status: string }> {
-  const r = await fetch(`${apiBase}/swap/cross-chain/submit-deposit`, {
+  const r = await fetch(`${apiBase}/swap/cross-chain/near-intents/submit-deposit`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteId, txHash, confirm: true }),
   });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Could not report the deposit");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error?.message ?? "Could not report the deposit");
   return r.json();
 }

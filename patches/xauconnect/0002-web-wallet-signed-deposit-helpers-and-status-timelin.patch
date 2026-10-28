@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Akhilesh Patil <70477748+akhilexx@users.noreply.github.com>
-Date: Wed, 28 Oct 2026 22:39:01 +0530
-Subject: [PATCH 2/4] web: wallet-signed deposit helpers and status timeline
+Date: Thu, 29 Oct 2026 03:50:32 +0530
+Subject: [PATCH 2/6] web: wallet-signed deposit helpers and status timeline
  for NEAR Intents routes
 
 ---
@@ -17,7 +17,7 @@ Subject: [PATCH 2/4] web: wallet-signed deposit helpers and status timeline
 
 diff --git a/apps/web/src/components/swap/near-intents-status.tsx b/apps/web/src/components/swap/near-intents-status.tsx
 new file mode 100644
-index 0000000..c754954
+index 0000000..4b2d021
 --- /dev/null
 +++ b/apps/web/src/components/swap/near-intents-status.tsx
 @@ -0,0 +1,34 @@
@@ -34,7 +34,7 @@ index 0000000..c754954
 +  useEffect(() => {
 +    const ac = new AbortController();
 +    const get = async () => {
-+      const r = await fetch(`${props.apiBase}/swap/cross-chain/status/${encodeURIComponent(props.quoteId)}`, { signal: ac.signal });
++      const r = await fetch(`${props.apiBase}/swap/cross-chain/near-intents/status/${encodeURIComponent(props.quoteId)}`, { signal: ac.signal });
 +      if (!r.ok) throw new Error(String(r.status));
 +      return (await r.json()) as { status: string };
 +    };
@@ -57,7 +57,7 @@ index 0000000..c754954
 +}
 diff --git a/apps/web/src/lib/near-intents/deposit.ts b/apps/web/src/lib/near-intents/deposit.ts
 new file mode 100644
-index 0000000..edbb874
+index 0000000..10c983c
 --- /dev/null
 +++ b/apps/web/src/lib/near-intents/deposit.ts
 @@ -0,0 +1,111 @@
@@ -67,7 +67,7 @@ index 0000000..edbb874
 + * Target path: apps/web/src/lib/near-intents/deposit.ts
 + * NOT tested in the router repo (needs a wallet). Type-checked against @solana/web3.js 1.x.
 + *
-+ * The backend returns unsigned DepositInstructions from POST /swap/cross-chain/build. This file only
++ * The backend returns unsigned DepositInstructions from POST /swap/cross-chain/near-intents/build. This file only
 + * turns them into a wallet request. The user's wallet shows and signs it; nothing here holds keys.
 + *   EVM:    pass wagmi's sendTransactionAsync (the same call executeCompositeCrossChain already uses).
 + *   Solana: build a Transaction, wallet signTransaction, then the existing POST /swap/submit-solana path.
@@ -166,10 +166,10 @@ index 0000000..edbb874
 +
 +/** Optional: tell the backend the deposit hash so the route starts sooner. */
 +export async function reportDeposit(apiBase: string, quoteId: string, txHash: string): Promise<{ status: string }> {
-+  const r = await fetch(`${apiBase}/swap/cross-chain/submit-deposit`, {
++  const r = await fetch(`${apiBase}/swap/cross-chain/near-intents/submit-deposit`, {
 +    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteId, txHash, confirm: true }),
 +  });
-+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Could not report the deposit");
++  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error?.message ?? "Could not report the deposit");
 +  return r.json();
 +}
 diff --git a/apps/web/src/lib/near-intents/solana-deposit-ix.ts b/apps/web/src/lib/near-intents/solana-deposit-ix.ts
@@ -222,7 +222,7 @@ index 0000000..2c19799
 +}
 diff --git a/apps/web/src/lib/near-intents/status.ts b/apps/web/src/lib/near-intents/status.ts
 new file mode 100644
-index 0000000..e9673e9
+index 0000000..6d8b4e7
 --- /dev/null
 +++ b/apps/web/src/lib/near-intents/status.ts
 @@ -0,0 +1,59 @@
@@ -230,7 +230,7 @@ index 0000000..e9673e9
 + * Deposit status polling and timeline copy for cross-chain XAU Routes.
 + *
 + * Target path in the XAUConnect repo: apps/web/src/lib/near-intents/status.ts
-+ * Self-contained. Polls XAUConnect's GET /swap/cross-chain/status/{quoteId} (or any getter)
++ * Self-contained. Polls XAUConnect's GET /swap/cross-chain/near-intents/status/{quoteId} (or any getter)
 + * until a terminal state. Copy never names the venue.
 + */
 +

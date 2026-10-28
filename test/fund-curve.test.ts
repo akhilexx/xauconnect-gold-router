@@ -51,3 +51,15 @@ test("end to end (mock fetch): plan -> venue dry quote delivers >= wanted SOL", 
   assert.ok(BigInt(q.amountIn) > 0n);
   assert.equal(q.routeLabel, "XAU Route");
 });
+
+test("XAUGC live curve snapshot (29 Oct) is the fair-sol recipe and matches GRADUATION", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { GRADUATION, QUOTE_DECIMALS, recipeFromConfig } = await import("../src/xauconnect/fund-curve.ts");
+  const { curve } = JSON.parse(readFileSync(new URL("../fixtures/xaugc-curve-2026-10-29.json", import.meta.url), "utf8"));
+  assert.deepEqual(recipeFromConfig(curve.config), { id: "fair-sol", quote: "SOL" });
+  assert.equal(curve.preset, "fair");
+  assert.equal(curve.quoteSymbol, "SOL");
+  assert.equal(Number(curve.threshold), GRADUATION.SOL);
+  assert.equal(curve.quoteDecimals, QUOTE_DECIMALS.SOL);
+  assert.equal(curve.migrated, false);
+});

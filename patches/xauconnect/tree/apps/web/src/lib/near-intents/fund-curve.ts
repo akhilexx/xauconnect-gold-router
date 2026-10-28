@@ -3,7 +3,7 @@
  *
  * Target path in the XAUConnect repo: apps/web/src/lib/near-intents/fund-curve.ts
  * Self-contained (no imports). Pure logic: pool config -> recipe -> quote token, the body for
- * POST /swap/cross-chain/quote, the graduation warning, and the hand-off to the existing buy
+ * POST /swap/cross-chain/near-intents/quote, the graduation warning, and the hand-off to the existing buy
  * widget. The buy itself stays the existing Gold Curve flow, signed in the user's Solana wallet.
  */
 
@@ -40,7 +40,7 @@ export function recipeFromConfig(config: string): { id: RecipeId; quote: QuoteTo
 
 export function toBase(amount: string, decimals: number): string {
   if (!/^\d+(\.\d+)?$/.test(amount)) throw new Error(`bad amount ${amount}`);
-  const [w, f = ""] = amount.split(".");
+  const [w = "0", f = ""] = amount.split(".");
   if (f.length > decimals) throw new Error(`${amount} has more than ${decimals} decimals`);
   return (BigInt(w) * 10n ** BigInt(decimals) + BigInt(f.padEnd(decimals, "0") || "0")).toString();
 }
@@ -62,7 +62,7 @@ export function graduationCheck(quote: QuoteToken, raisedSoFar: number, buyAmoun
   return { remaining, share, warning };
 }
 
-/** Body for XAUConnect's POST /swap/cross-chain/quote with the NEAR Intents venue. */
+/** Body for XAUConnect's POST /swap/cross-chain/near-intents/quote with the NEAR Intents venue. */
 export interface CrossChainQuoteBody {
   fromChain: "ethereum" | "bsc" | "polygon" | "arbitrum" | "base" | "avalanche" | "solana";
   toChain: "solana";

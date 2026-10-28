@@ -2,7 +2,7 @@
  * Deposit status polling and timeline copy for cross-chain XAU Routes.
  *
  * Target path in the XAUConnect repo: apps/web/src/lib/near-intents/status.ts
- * Self-contained. Polls XAUConnect's GET /swap/cross-chain/status/{quoteId} (or any getter)
+ * Self-contained. Polls XAUConnect's GET /swap/cross-chain/near-intents/status/{quoteId} (or any getter)
  * until a terminal state. Copy never names the venue.
  */
 

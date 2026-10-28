@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Akhilesh Patil <70477748+akhilexx@users.noreply.github.com>
-Date: Wed, 28 Oct 2026 22:39:01 +0530
-Subject: [PATCH 1/4] routing: NEAR Intents venue for cross-chain XAU Routes
+Date: Thu, 29 Oct 2026 03:50:32 +0530
+Subject: [PATCH 1/6] routing: NEAR Intents venue for cross-chain XAU Routes
  (off by default)
 
 Self-contained adapter + framework-agnostic handlers. Dry quotes only unless
@@ -16,7 +16,7 @@ returns unsigned deposit instructions. No keys, no signing.
 
 diff --git a/backend/src/services/routing/near-intents.test.ts b/backend/src/services/routing/near-intents.test.ts
 new file mode 100644
-index 0000000..60bebde
+index 0000000..5451a89
 --- /dev/null
 +++ b/backend/src/services/routing/near-intents.test.ts
 @@ -0,0 +1,71 @@
@@ -33,7 +33,7 @@ index 0000000..60bebde
 +import {
 +  CHAIN_TO_ONECLICK, NearIntentsVenue, USER_ERRORS, createNearIntentsHandlers, erc20TransferData, fromOneClickChain,
 +  nearIntentsConfigFromEnv, toOneClickChain, type XauChainKey,
-+} from "./near-intents";
++} from "./near-intents.js";
 +
 +const TOKENS = [
 +  { assetId: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near", blockchain: "arb", symbol: "USDC", decimals: 6, contractAddress: "0xaf88d065e77c8cc2239327c5edb3a432268e5831" },
@@ -93,7 +93,7 @@ index 0000000..60bebde
 +});
 diff --git a/backend/src/services/routing/near-intents.ts b/backend/src/services/routing/near-intents.ts
 new file mode 100644
-index 0000000..aa64ab2
+index 0000000..38c0764
 --- /dev/null
 +++ b/backend/src/services/routing/near-intents.ts
 @@ -0,0 +1,586 @@
@@ -576,17 +576,17 @@ index 0000000..aa64ab2
 +    if (!this.cfg.enabled) throw new NearIntentsError("DISABLED", "NEAR_INTENTS_ENABLED is not set");
 +    if (!this.cfg.executionEnabled) throw new NearIntentsError("EXECUTION_DISABLED", "NEAR_INTENTS_EXECUTION_ENABLED is not 1");
 +    if (p.confirm !== true) throw new NearIntentsError("CONFIRM_REQUIRED", "confirm:true is required");
-+    const [depositAddress, memo] = p.quoteId.split("|");
++    const [depositAddress = "", memo] = p.quoteId.split("|");
 +    const body: Record<string, string> = { txHash: p.txHash, depositAddress };
 +    if (memo) body.memo = memo;
 +    const r = await this.req<{ status: string }>("/v0/deposit/submit", { method: "POST", body: JSON.stringify(body) });
 +    return { status: r.status, terminal: TERMINAL_STATUSES.has(r.status), destinationTxs: [], raw: r };
 +  }
 +
-+  /** Read-only status for /swap/cross-chain/status/{quoteId}. */
++  /** Read-only status for /swap/cross-chain/near-intents/status/{quoteId}. */
 +  async status(quoteId: string): Promise<StatusResult> {
 +    if (!this.cfg.enabled) throw new NearIntentsError("DISABLED", "NEAR_INTENTS_ENABLED is not set");
-+    const [depositAddress, memo] = quoteId.split("|");
++    const [depositAddress = "", memo] = quoteId.split("|");
 +    const qs = new URLSearchParams({ depositAddress });
 +    if (memo) qs.set("depositMemo", memo);
 +    const r = await this.req<{ status: string; swapDetails?: { destinationChainTxHashes?: { hash: string }[] } }>(`/v0/status?${qs}`);
@@ -596,7 +596,7 @@ index 0000000..aa64ab2
 +}
 +
 +// ---------- framework-agnostic route handlers ----------
-+// Wire these into backend/src/routes/swap.ts (see patches/xauconnect/INTEGRATION.md). Quotes are cached
++// XAUConnect wires near-intents-xau.ts (same cache semantics, backend error envelope) via routes/near-intents.ts. Quotes are cached
 +// server-side so build() never trusts amounts or expiry sent back by the browser, and each quoteRef can be
 +// built once (one deposit address per confirmed quote).
 +
@@ -643,7 +643,7 @@ index 0000000..aa64ab2
 +    while (cache.size > (opts.maxEntries ?? 5000)) cache.delete(cache.keys().next().value as string);
 +  };
 +  return {
-+    /** POST /swap/cross-chain/quote (venue=near-intents). Dry. */
++    /** POST /swap/cross-chain/near-intents/quote (venue=near-intents). Dry. */
 +    async quote(body: unknown): Promise<HandlerResult> {
 +      try {
 +        const input = validateQuoteInput(body);
@@ -654,7 +654,7 @@ index 0000000..aa64ab2
 +        return { status: 200, json: { quoteRef, quote } };
 +      } catch (e) { return fail(e); }
 +    },
-+    /** POST /swap/cross-chain/build { quoteRef, confirm: true }. Gated; one build per quoteRef. */
++    /** POST /swap/cross-chain/near-intents/build { quoteRef, confirm: true }. Gated; one build per quoteRef. */
 +    async build(body: unknown): Promise<HandlerResult> {
 +      try {
 +        const b = (body ?? {}) as { quoteRef?: string; confirm?: unknown };
@@ -665,14 +665,14 @@ index 0000000..aa64ab2
 +        return { status: 200, json: { deposit } };
 +      } catch (e) { return fail(e); }
 +    },
-+    /** GET /swap/cross-chain/status/{quoteId} for near-intents quote ids. */
++    /** GET /swap/cross-chain/near-intents/status/{quoteId} for near-intents quote ids. */
 +    async status(quoteId: string): Promise<HandlerResult> {
 +      try {
 +        const s = await venue.status(quoteId);
 +        return { status: 200, json: { status: s.status, terminal: s.terminal, destinationTxs: s.destinationTxs } };
 +      } catch (e) { return fail(e); }
 +    },
-+    /** POST /swap/cross-chain/submit-deposit { quoteId, txHash, confirm: true }. Optional speed-up. */
++    /** POST /swap/cross-chain/near-intents/submit-deposit { quoteId, txHash, confirm: true }. Optional speed-up. */
 +    async submitDeposit(body: unknown): Promise<HandlerResult> {
 +      try {
 +        const b = (body ?? {}) as { quoteId?: string; txHash?: string; confirm?: unknown };

@@ -477,17 +477,17 @@ export class NearIntentsVenue {
     if (!this.cfg.enabled) throw new NearIntentsError("DISABLED", "NEAR_INTENTS_ENABLED is not set");
     if (!this.cfg.executionEnabled) throw new NearIntentsError("EXECUTION_DISABLED", "NEAR_INTENTS_EXECUTION_ENABLED is not 1");
     if (p.confirm !== true) throw new NearIntentsError("CONFIRM_REQUIRED", "confirm:true is required");
-    const [depositAddress, memo] = p.quoteId.split("|");
+    const [depositAddress = "", memo] = p.quoteId.split("|");
     const body: Record<string, string> = { txHash: p.txHash, depositAddress };
     if (memo) body.memo = memo;
     const r = await this.req<{ status: string }>("/v0/deposit/submit", { method: "POST", body: JSON.stringify(body) });
     return { status: r.status, terminal: TERMINAL_STATUSES.has(r.status), destinationTxs: [], raw: r };
   }
 
-  /** Read-only status for /swap/cross-chain/status/{quoteId}. */
+  /** Read-only status for /swap/cross-chain/near-intents/status/{quoteId}. */
   async status(quoteId: string): Promise<StatusResult> {
     if (!this.cfg.enabled) throw new NearIntentsError("DISABLED", "NEAR_INTENTS_ENABLED is not set");
-    const [depositAddress, memo] = quoteId.split("|");
+    const [depositAddress = "", memo] = quoteId.split("|");
     const qs = new URLSearchParams({ depositAddress });
     if (memo) qs.set("depositMemo", memo);
     const r = await this.req<{ status: string; swapDetails?: { destinationChainTxHashes?: { hash: string }[] } }>(`/v0/status?${qs}`);
@@ -497,7 +497,7 @@ export class NearIntentsVenue {
 }
 
 // ---------- framework-agnostic route handlers ----------
-// Wire these into backend/src/routes/swap.ts (see patches/xauconnect/INTEGRATION.md). Quotes are cached
+// XAUConnect wires near-intents-xau.ts (same cache semantics, backend error envelope) via routes/near-intents.ts. Quotes are cached
 // server-side so build() never trusts amounts or expiry sent back by the browser, and each quoteRef can be
 // built once (one deposit address per confirmed quote).
 
@@ -544,7 +544,7 @@ export function createNearIntentsHandlers(venue: NearIntentsVenue, opts: { now?:
     while (cache.size > (opts.maxEntries ?? 5000)) cache.delete(cache.keys().next().value as string);
   };
   return {
-    /** POST /swap/cross-chain/quote (venue=near-intents). Dry. */
+    /** POST /swap/cross-chain/near-intents/quote (venue=near-intents). Dry. */
     async quote(body: unknown): Promise<HandlerResult> {
       try {
         const input = validateQuoteInput(body);
@@ -555,7 +555,7 @@ export function createNearIntentsHandlers(venue: NearIntentsVenue, opts: { now?:
         return { status: 200, json: { quoteRef, quote } };
       } catch (e) { return fail(e); }
     },
-    /** POST /swap/cross-chain/build { quoteRef, confirm: true }. Gated; one build per quoteRef. */
+    /** POST /swap/cross-chain/near-intents/build { quoteRef, confirm: true }. Gated; one build per quoteRef. */
     async build(body: unknown): Promise<HandlerResult> {
       try {
         const b = (body ?? {}) as { quoteRef?: string; confirm?: unknown };
@@ -566,14 +566,14 @@ export function createNearIntentsHandlers(venue: NearIntentsVenue, opts: { now?:
         return { status: 200, json: { deposit } };
       } catch (e) { return fail(e); }
     },
-    /** GET /swap/cross-chain/status/{quoteId} for near-intents quote ids. */
+    /** GET /swap/cross-chain/near-intents/status/{quoteId} for near-intents quote ids. */
     async status(quoteId: string): Promise<HandlerResult> {
       try {
         const s = await venue.status(quoteId);
         return { status: 200, json: { status: s.status, terminal: s.terminal, destinationTxs: s.destinationTxs } };
       } catch (e) { return fail(e); }
     },
-    /** POST /swap/cross-chain/submit-deposit { quoteId, txHash, confirm: true }. Optional speed-up. */
+    /** POST /swap/cross-chain/near-intents/submit-deposit { quoteId, txHash, confirm: true }. Optional speed-up. */
     async submitDeposit(body: unknown): Promise<HandlerResult> {
       try {
         const b = (body ?? {}) as { quoteId?: string; txHash?: string; confirm?: unknown };
