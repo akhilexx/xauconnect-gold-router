@@ -1,0 +1,11 @@
+{
+  "sources": [
+    { "symbol": "USDC", "chain": "arb", "amount": "100", "refundTo": "0x0000000000000000000000000000000000000001" },
+    { "symbol": "USDT", "chain": "eth", "amount": "60", "refundTo": "0x0000000000000000000000000000000000000001" }
+  ],
+  "deliveries": [
+    { "symbol": "XAUT", "chain": "eth", "mode": "DESTINATION_CHAIN", "recipient": "0x0000000000000000000000000000000000000001" },
+    { "symbol": "XAUT", "chain": "eth", "mode": "INTENTS", "recipient": "demo.near" }
+  ],
+  "slippageBps": 50
+}
