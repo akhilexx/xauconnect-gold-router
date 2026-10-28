@@ -9,7 +9,7 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface OneClickOptions {
   baseUrl?: string;
-  jwt?: string; // optional; without it 1Click adds an extra 0.25% fee
+  jwt?: string; // optional; without it 1Click adds an extra fee (0.2% per HACKATHON.md Q-006)
   fetch?: FetchLike;
   timeoutMs?: number;
 }

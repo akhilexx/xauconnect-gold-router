@@ -17,7 +17,7 @@ export const defaultPolicy: Policy = {
   maxSlippageBps: 100,
   maxCostBps: 300,
   allowedChains: "*",
-  allowedOutputSymbols: ["XAUT", "USDC", "USDT"],
+  allowedOutputSymbols: ["XAUT", "USDC", "USDT", "SOL"],
 };
 
 export function policyFromEnv(env: Record<string, string | undefined>): Policy {

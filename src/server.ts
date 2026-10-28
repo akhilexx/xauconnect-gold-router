@@ -15,7 +15,10 @@ import type { RouteIntent } from "./types.ts";
 export async function startServer(port = Number(process.env.PORT ?? 8787)) {
   const deps = await buildDeps();
   const statusClient = new OneClickClient({ baseUrl: process.env.ONECLICK_BASE_URL, jwt: process.env.ONECLICK_JWT });
-  const page = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
+  // Prefill the demo page with the configured public demo address, if any.
+  const demoAddr = process.env.RECIPIENT_EVM && /^0x[0-9a-fA-F]{40}$/.test(process.env.RECIPIENT_EVM) ? process.env.RECIPIENT_EVM : null;
+  let page = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
+  if (demoAddr) page = page.replace(/0xYour(Arbitrum|Ethereum)Address/g, demoAddr);
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
