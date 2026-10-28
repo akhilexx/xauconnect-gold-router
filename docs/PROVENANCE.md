@@ -30,13 +30,19 @@ The landing page (https://nearhackathon.com/#apply, same date) says: "01 Build y
 | --- | --- |
 | 28 Oct 2026, 13:53 | Design spike, 6 commits: 1Click client, token registry, units, policy engine, router, offline mock, CLI, HTTP API, demo page, tests, README |
 | 28 Oct 2026, evening | Gold Curve funding planner (`src/goldcurve.ts`, `goldcurve` CLI command), Solana delivery in the default policy, project metadata, docs reworked around the real XAUConnect codebase, backlog and test stubs |
-| from then until 14 Nov 2026 | Backlog items (docs/BACKLOG.md), each as its own dated commit |
+| 28 Oct 2026, 22:25-23:00 | Backlog 1-3, 5 commits: NEAR Intents venue adapter for XAUConnect (`src/xauconnect/near-intents.ts`), deposit flow behind confirm + `EXECUTION_ENABLED` (`src/execute.ts`, Solana instruction bytes, status poller), "Fund from another chain" (`src/xauconnect/fund-curve.ts`, `fund` CLI, HTTP routes), the `patches/xauconnect/` export for the XAUConnect repo, docs. 53 tests pass. Live 1Click use was dry quotes only (docs/live-dry-quotes.md) |
+| from then until 14 Nov 2026 | Remaining backlog items (docs/BACKLOG.md 4-6), each as its own dated commit |
 
 Every commit keeps its real author date. Commits were written by the owner's AI build assistant (see below). Author names may be set to the owner's GitHub identity when published; dates are never changed.
 
-Separately, on the XAUConnect repo, branch `near-intents-hackathon` will hold the NEAR Intents adapter and UI wiring. Its base is tagged `pre-hackathon` and its end `hackathon-submission` (Q-003), and the README links the diff. Not started as of 28 Oct 2026.
+Separately, on the XAUConnect repo, branch `near-intents-hackathon` will hold the NEAR Intents adapter and UI wiring, which is new work in the window. Its base is tagged `pre-hackathon` and its end `hackathon-submission` (Q-003), and the README links the diff. As of 28 Oct 2026, 23:00 IST, the branch does not exist. Its content is ready as `patches/xauconnect/` in this repo:
+- `git am` patches that add new files only;
+- `INTEGRATION.md`, for edits to existing files.
+These were written without access to the XAUConnect source, so the existing-file edits need adapting when applied. Commits on that branch should note that the files originate in this repository (same bytes as `src/xauconnect/*`).
 
 ## Third-party and AI-written code (Q-005)
 - No runtime dependencies. Uses Node.js built-ins only.
+- Patches for XAUConnect use libraries XAUConnect already has: `@solana/web3.js`, React, and the existing wallet stack. Type-checked against `@solana/web3.js` 1.x, React 19 types and TypeScript 5. Program IDs and instruction layouts (System transfer, SPL `TransferChecked`, ATA `CreateIdempotent`) follow the public Solana program specs.
+- API shapes from the public 1Click OpenAPI spec (snapshot taken 28 Oct 2026).
 - NEAR Intents 1Click API (HTTP).
 - Code in this repository was largely written by an AI build assistant working for the owner and reviewed by the owner.

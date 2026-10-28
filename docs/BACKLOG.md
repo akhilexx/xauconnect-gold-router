@@ -17,28 +17,71 @@ Status key: [x] done, [ ] to do. Tests: R uses `node:test` (stubs in `test/backl
 - [x] Gold Curve funding planner `src/goldcurve.ts` + `goldcurve` CLI command (5 tests), live quote USDC@arb/base -> SOL@sol verified
 - [x] Solana delivery (`SOL`, `USDC` on `sol`) allowed by default policy
 
-## 1. NEAR Intents adapter in the XAUConnect backend (X, P0)
-Goal: XAUConnect's own quote fan-out gets a cross-chain venue that covers Solana <-> EVM, which today's EVM-only cross-chain routes do not.
-- [ ] `backend/src/services/routing/near-intents.ts` (new): 1Click tokens/quote/status client with token-list caching, plus a chain-key map from XAUConnect `ethereum|bsc|polygon|arbitrum|base|avalanche|solana` to 1Click `eth|bsc|pol|arb|base|avax|sol`. Port it from R `src/oneclick.ts` / `src/registry.ts`, and say in the commit that it is ported from R.
-- [ ] Register it as a cross-chain venue in `backend/src/services/routing/cross-chain.ts`. Its result has the same shape as existing cross-chain quotes, with route label `XAU Route` and provider id `near-intents` (internal only).
-- [ ] `backend/src/routes/swap.ts`: `/swap/cross-chain/quote` includes NEAR Intents quotes. `/swap/cross-chain/build` with a NEAR Intents route returns a **deposit instruction** `{ chain, depositAddress, token, amount, memo?, deadline }`, from a `dry:false` quote that is requested only at build time. `/swap/cross-chain/status/{quoteId}` proxies `/v0/status`.
-- [ ] `backend/src/lib/user-errors.ts`: map 1Click errors (recipient invalid, amount too low, no route) to user-facing text with no provider names.
-- [ ] Env: `ONECLICK_BASE_URL`, `ONECLICK_JWT` (optional), `NEAR_INTENTS_ENABLED=false` by default, all in `.env.example` only.
-- Tests (X backend runner): the chain map round-trips; the quote maps into the existing CrossChainQuote shape; build calls `dry:false` exactly once and only from build, never from quote; status proxy; errors are mapped; the feature flag off means no 1Click calls; no provider names in user-facing strings.
+## 1-3. Built in R on 28 Oct (22:25-23:00 IST), and shipped to X as patches. Not yet applied to X
+The X source wasn't available while this was built: it is on the owner's Mac. So the work was done in this order:
+1. The X modules were written as **self-contained files inside R**, under `src/xauconnect/`, with no imports, and tested in R.
+2. They were copied byte for byte into `patches/xauconnect/tree/`. `test/patches.test.ts` enforces that the copies match.
+3. They were exported as `git am` patches 0001-0004, which add **new files only** under the fact-sheet paths.
+4. Edits to *existing* X files are anchored snippets in `patches/xauconnect/INTEGRATION.md`, marked ADAPT. They are unverified until someone applies them against the real code.
 
-## 2. Wallet-signed deposit in the swap UI (X, P0)
-- [ ] `apps/web/src/components/swap/swap-panel.tsx`: for a NEAR Intents route, an EVM origin uses the existing wagmi `writeContract` for an ERC-20 `transfer(depositAddress, amount)`, or `sendTransaction` for a native asset. A Solana origin builds an SPL transfer, signs it in Phantom/Solflare, and broadcasts via the existing `/swap/submit-solana`. After that, call the 1Click `deposit/submit` with the tx hash (via the backend).
-- [ ] Status timeline (PENDING_DEPOSIT -> PROCESSING -> SUCCESS / REFUNDED / FAILED) polling `/swap/cross-chain/status/{quoteId}`.
-- [ ] Quote-freshness guard: re-quote if the quote is older than 60 s or `minAmountOut` is worse than the slippage.
-- [ ] `POST /swap/record`, the existing analytics, records the route as `xau-route-intents`.
-- Tests: transfer calldata (`a9059cbb`, padded address, amount); the SPL transfer instruction builder; a stale quote blocks signing; the poller stops on terminal states; UI strings contain no provider names.
-- R mirrors this as `POST /v1/routes/:id/execute`, which returns deposit instructions only, behind `confirm:true` + `EXECUTION_ENABLED=1` (tests in `test/backlog.test.ts`).
+### 1. NEAR Intents adapter in the XAUConnect backend (X, P0)
+- [x] `backend/src/services/routing/near-intents.ts` (patch 0001; R `src/xauconnect/near-intents.ts`). It contains:
+  - a tokens/quote/status/deposit-submit client with token-list caching;
+  - a chain-key map `ethereum|bsc|polygon|arbitrum|base|avalanche|solana` -> `eth|bsc|pol|arb|base|avax|sol`;
+  - native sentinels;
+  - an `XAU Route` label, with `near-intents` used as the internal venue id;
+  - `NEAR_INTENTS_ENABLED` off by default;
+  - Express-agnostic handlers (`quote`, `build`, `status`, `submitDeposit`).
+  It is written fresh for X, not ported line by line from `src/oneclick.ts`.
+- [ ] Register in `cross-chain.ts`: snippet in INTEGRATION.md section 2 (ADAPT, unverified)
+- [ ] Mount in `routes/swap.ts`: snippet in INTEGRATION.md section 3 (ADAPT). Behaviour of the handlers it mounts:
+  - quote is always dry;
+  - build makes the only `dry:false` call, gated by confirm, enabled, execution and the 60 s expiry;
+  - status is proxied.
+- [x] User-error mapping with no provider names (`toUserError`, `USER_ERRORS` in the module). Wiring into `user-errors.ts` is INTEGRATION.md section 4 (ADAPT)
+- [x] Env: `NEAR_INTENTS_ENABLED`, `NEAR_INTENTS_EXECUTION_ENABLED`, `ONECLICK_BASE_URL`, `ONECLICK_JWT`, `NEAR_INTENTS_REFERRAL`, `ONECLICK_TIMEOUT_MS`. These go in `.env.example` per INTEGRATION.md section 1; no values are committed
+- Tests (R `test/near-intents.test.ts`, 15 passing; a 5-test subset ships in patch 0001 and passes under `tsx --test`):
+  - chain map round-trip;
+  - quote mapping;
+  - `dry:false` exactly once and only from build;
+  - status proxy;
+  - error mapping;
+  - flag off means zero fetches;
+  - no provider names in user strings.
+  - X's own runner (vitest/jest) still needs checking: see `backend/package.json`
 
-## 3. Gold Curve: "Buy from any chain" (X, P0/P1)
-Goal: a Gold Curve buyer holding USDC/USDT on any EVM chain gets the curve's quote token (SOL or USDC) on Solana in one flow, then buys on the existing token page.
-- [ ] On the token page for Gold Curve pools (`apps/web`, the existing `/token/solana/[mint]` page; locate the buy widget component), add an "Fund from another chain" option. It reads the recipe quote token from the pool config (Fair/Shield/Distribute x SOL/USDC), calls the NEAR Intents route to deliver exactly the needed amount to the connected Solana wallet, then hands off to the existing DBC buy flow (backend Gold Curve prepare/quote/swap; pre-existing, unchanged).
-- [ ] Show progress toward graduation (10 SOL / 750 USDC) and what share of the remaining distance the buy covers (port `graduationShare` from R `src/goldcurve.ts`).
-- Tests: the quote token is derived from all six recipe configs; the funding intent delivers to the connected wallet only; a funding amount over the remaining graduation distance warns; the existing DBC buy path is untouched (snapshot of the call).
+### 2. Wallet-signed deposit (X, P0; R mirror)
+- [x] R: `POST /v1/routes/:id/execute` (`src/execute.ts`) returns unsigned deposit instructions only (EVM calldata, Solana instruction data, or manual instructions). It refuses unless `confirm:true` **and** `EXECUTION_ENABLED=1`. Before the one `dry:false` call it:
+  - re-checks policy;
+  - re-quotes if the plan is older than 60 s;
+  - aborts on price movement beyond slippage or an amount mismatch.
+  `POST /v1/deposits/submit` is gated the same way. 9 tests.
+- [x] X web helpers in patch 0002:
+  - `apps/web/src/lib/near-intents/deposit.ts`: EVM `transfer`/native; Solana SystemProgram or SPL `TransferChecked` with an idempotent ATA create, built with web3.js and signed by the user's wallet.
+  - `solana-deposit-ix.ts`: its byte layout matches web3.js in a smoke build.
+  - `status.ts`: poller and timeline.
+  - `components/swap/near-intents-status.tsx`.
+  These are type-checked, not run in the app or with a wallet.
+- [ ] Wire into `swap-panel.tsx`: INTEGRATION.md section 5 (ADAPT, unverified)
+- [ ] Record swaps via the existing `/api/swap/record` with `venue: "near-intents"` (INTEGRATION.md section 3 note; the earlier name `xau-route-intents` was dropped for the venue id)
+- Not verified (needs one small deposit run by the owner; 1Click has no testnet): that SPL deposits to the deposit address's ATA are credited.
+
+### 3. Gold Curve: "Fund from another chain" (X, P0/P1)
+- [x] `apps/web/src/lib/near-intents/fund-curve.ts` (patch 0003; R `src/xauconnect/fund-curve.ts`):
+  - maps pool config to recipe to quote token for all six recipes;
+  - "want" maps to EXACT_OUTPUT and "spend" to EXACT_INPUT;
+  - the recipient is always the connected Solana wallet;
+  - adds graduation progress (10 SOL / 750 USDC) and a warning above the remaining amount;
+  - hands off to `/token/solana/<mint>`.
+- [x] `components/launchpad/fund-from-another-chain.tsx` panel, with a review checkbox before signing. It is type-checked, not rendered in the app
+- [ ] Place the panel on the token page: INTEGRATION.md section 6 (ADAPT). The existing DBC buy flow is not touched; the panel only links to it
+- Tests (R `test/fund-curve.test.ts`, 4):
+  - six recipes;
+  - connected-wallet recipient only;
+  - graduation warning;
+  - exact-output body.
+  - A snapshot test of the existing DBC buy call was **not** written, because that code isn't available here.
+- CLI: `node src/cli.ts fund ...`; HTTP: `POST /v1/goldcurve/fund`. Live dry runs: docs/live-dry-quotes.md
 
 ## 4. XAUT "gold from any chain" (X + R, P1)
 - [ ] In R: add XAUConnect's same-chain quote (`POST https://xauconnect.com/api/swap/quote`, headers `X-Client-Source: agent`) as a comparison provider for same-chain legs (e.g. USDT@eth -> XAUT@eth). Rank across providers.

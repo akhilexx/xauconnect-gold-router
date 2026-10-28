@@ -12,7 +12,9 @@
     "start": "node src/server.ts",
     "demo": "MOCK=1 node src/cli.ts plan --from 100:USDC:arb:0x0000000000000000000000000000000000000001 --from 60:USDT:eth:0x0000000000000000000000000000000000000001 --to XAUT:eth:DESTINATION_CHAIN:0x0000000000000000000000000000000000000001 --to XAUT:eth:INTENTS:demo.near",
     "plan": "node src/cli.ts plan",
-    "tokens": "node src/cli.ts tokens"
+    "tokens": "node src/cli.ts tokens",
+    "fund": "node src/cli.ts fund",
+    "patches": "scripts/build-xau-patches.sh"
   },
   "author": "Akhilesh Patil (https://github.com/akhilexx)",
   "repository": {
