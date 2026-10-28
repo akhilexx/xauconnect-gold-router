@@ -1,0 +1,8 @@
+# gitleaks false positives (checked 28 Oct 2026 22:42 IST): generic-api-key matched public token
+# contract addresses (USDC on Arbitrum, XAUT on Ethereum) in test fixtures. No secrets.
+41a17df03eab7dc2f1dcf88c05e79093bfbd089c:patches/xauconnect/tree/backend/src/services/routing/near-intents.test.ts:generic-api-key:21
+33d15316d7b33819f8176ac562db93dcfe55c6e8:test/near-intents.test.ts:generic-api-key:105
+41a17df03eab7dc2f1dcf88c05e79093bfbd089c:patches/xauconnect/0001-routing-NEAR-Intents-venue-for-cross-chain-XAU-Route.patch:generic-api-key:43
+patches/xauconnect/0001-routing-NEAR-Intents-venue-for-cross-chain-XAU-Route.patch:generic-api-key:43
+patches/xauconnect/tree/backend/src/services/routing/near-intents.test.ts:generic-api-key:21
+test/near-intents.test.ts:generic-api-key:105
