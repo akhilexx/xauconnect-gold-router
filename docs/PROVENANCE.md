@@ -36,9 +36,9 @@ The landing page (https://nearhackathon.com/#apply, same date) says: "01 Build y
 Every commit keeps its real author date. Commits were written by the owner's AI build assistant (see below). Author names may be set to the owner's GitHub identity when published; dates are never changed.
 
 Separately, on the XAUConnect repo, branch `near-intents-hackathon` will hold the NEAR Intents adapter and UI wiring, which is new work in the window. Its base is tagged `pre-hackathon` and its end `hackathon-submission` (Q-003), and the README links the diff. As of 28 Oct 2026, 23:00 IST, the branch does not exist. Its content is ready as `patches/xauconnect/` in this repo:
-- `git am` patches that add new files only;
-- `INTEGRATION.md`, for edits to existing files.
-These were written without access to the XAUConnect source, so the existing-file edits need adapting when applied. Commits on that branch should note that the files originate in this repository (same bytes as `src/xauconnect/*`).
+- `git am` patches 0001-0005 that add new files, and 0006, a small diff to `backend/src/routes/swap.ts` and `backend/package.json`;
+- `INTEGRATION.md`, for 3 hand edits to existing UI and config files.
+Update 29 Oct 2026 03:53 IST (commit b9514a0): these were checked against the public XAUConnect main `73c354c0d567c00ffcf05d4d71fa6de0983baa22` (committed 19 Oct 2026 01:30 IST, before the announcement, so it is the `pre-hackathon` base). All 6 patches apply with `git am` onto byte-identical copies of the files they touch (blob SHAs recorded in `patches/xauconnect/base-73c354c/`). The patched files type-check under XAUConnect's real tsconfig settings. The full monorepo build has not been run yet. Commits on that branch should note that the files originate in this repository (same bytes as `src/xauconnect/*`).
 
 ## Third-party and AI-written code (Q-005)
 - No runtime dependencies. Uses Node.js built-ins only.

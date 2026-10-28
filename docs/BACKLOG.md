@@ -95,5 +95,5 @@ The X source wasn't available while this was built: it is on the owner's Mac. So
 
 ## 6. Polish (P2)
 - [ ] 1Click JWT via partners.near-intents.org (removes the 0.2% fee, Q-006); optional confidential swaps toggle.
-- [ ] Hosted demo (Q-012: a plus; keep it up until at least 18 Nov, ideally 25 Nov): deploy R's server or the XAUConnect branch to staging.
+- [ ] Hosted demo (Q-012: a plus; keep it up until at least 18 Nov, ideally 25 Nov). Prepared 29 Oct: `DEMO_PUBLIC=1` read-only mode, `render.yaml`, docs/HOSTED-DEMO.md, test/demo.test.ts (6 tests), local live smoke OK. Remaining: the owner/King Bot deploys it on Render.
 - [ ] Refresh the README numbers, take screenshots, record the video, update PROVENANCE, and tag `hackathon-submission` on X.
