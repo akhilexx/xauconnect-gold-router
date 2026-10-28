@@ -1,0 +1,50 @@
+# Cross-chain XAU Routes on NEAR Intents (hackathon branch)
+
+Branch: `near-intents-hackathon`. Off by default. Built for the NEAR Hackathon (window 19 Oct to 14 Nov 2026).
+
+## What it adds
+
+- A NEAR Intents venue for cross-chain quotes: `backend/src/services/routing/near-intents.ts`.
+  It covers the 7 XAUConnect chains and sends a 1Click dry quote. Users see an **XAU Route**,
+  and the user-facing copy never names the venue.
+- A wallet-signed deposit flow. The backend returns unsigned deposit instructions, and the
+  user's own wallet signs them:
+  - EVM: an ERC-20 `transfer` or a native send, through the existing `sendTransactionAsync` path.
+  - Solana: a transfer that goes out through the existing `POST /swap/submit-solana`.
+  - The backend never signs and holds no keys.
+- "Fund from another chain" on Gold Curve token pages. It lands exactly the curve's quote token
+  (SOL or USDC) in the connected Solana wallet. The buy then happens in the existing Gold Curve
+  panel.
+
+## Switches
+
+| Env | Default | Effect |
+|---|---|---|
+| `NEAR_INTENTS_ENABLED` | `false` | Show NEAR Intents quotes at all |
+| `NEAR_INTENTS_EXECUTION_ENABLED` | unset | `1` lets `/swap/cross-chain/near-intents/build` request a real deposit address. Each build also needs `confirm: true` after the user's review step |
+| `ONECLICK_BASE_URL` | `https://1click.chaindefuser.com` | 1Click API |
+| `ONECLICK_JWT` | empty | Optional. Without it, 1Click adds a 0.2% fee |
+| `NEAR_INTENTS_REFERRAL` | empty | Optional referral tag |
+| `ONECLICK_TIMEOUT_MS` | `8000` | Per-request timeout |
+
+1Click has no testnet. Keep `NEAR_INTENTS_EXECUTION_ENABLED` unset until the owner runs a small
+mainnet deposit by hand.
+
+## Safety properties
+
+These are tested in `near-intents.test.ts` and in the router repo.
+
+- Quotes are always `dry: true`.
+- Build is refused before any network call unless both switches are on.
+- Quotes are cached on the server, so the browser cannot change amounts or expiry. Each quote
+  can be built once.
+- Build aborts if the price moved beyond the user's slippage, or if the new quote asks for more
+  input than the user confirmed.
+- A quote is valid for 60 seconds.
+
+## Not verified yet
+
+- Solana SPL deposits go to the deposit address's associated token account. That is standard
+  for 1Click, but confirm it with the first owner-run deposit.
+- Whether the integration edits in `swap.ts`, `cross-chain.ts`, `swap-panel.tsx` and the token
+  page fit the real code.

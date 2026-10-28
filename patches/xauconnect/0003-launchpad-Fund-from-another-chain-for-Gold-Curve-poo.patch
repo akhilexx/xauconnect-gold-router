@@ -1,0 +1,236 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Forge (Jyothish build assistant)" <forge@localhost>
+Date: Wed, 28 Oct 2026 22:39:01 +0530
+Subject: [PATCH 3/4] launchpad: Fund from another chain for Gold Curve pools
+
+---
+ .../launchpad/fund-from-another-chain.tsx     |  86 ++++++++++++
+ apps/web/src/lib/near-intents/fund-curve.ts   | 126 ++++++++++++++++++
+ 2 files changed, 212 insertions(+)
+ create mode 100644 apps/web/src/components/launchpad/fund-from-another-chain.tsx
+ create mode 100644 apps/web/src/lib/near-intents/fund-curve.ts
+
+diff --git a/apps/web/src/components/launchpad/fund-from-another-chain.tsx b/apps/web/src/components/launchpad/fund-from-another-chain.tsx
+new file mode 100644
+index 0000000..916b594
+--- /dev/null
++++ b/apps/web/src/components/launchpad/fund-from-another-chain.tsx
+@@ -0,0 +1,86 @@
++/**
++ * "Fund from another chain" panel for a Gold Curve token page.
++ * Target path: apps/web/src/components/launchpad/fund-from-another-chain.tsx
++ * NOT tested in the router repo. Side effects come in as props so it fits the app's API client and wallets:
++ *   getQuote   -> POST /swap/cross-chain/quote  (venue near-intents, dry)
++ *   onConfirm  -> POST /swap/cross-chain/build {quoteRef, confirm:true}, then deposit.ts sendEvmDeposit
++ * After delivery the user buys with the existing Gold Curve buy widget on the same page.
++ */
++import { useMemo, useState } from "react";
++import { planFunding, type CrossChainQuoteBody } from "../../lib/near-intents/fund-curve";
++
++/** USDC per EVM chain as listed by the venue (checked against the live token list on 2026-10-28). */
++export const USDC_BY_CHAIN: Record<string, string> = {
++  ethereum: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
++  arbitrum: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
++  base: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
++  polygon: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
++  bsc: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
++  avalanche: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
++};
++
++export interface QuoteView { quoteRef: string; quote: { amountInFormatted: string; amountOutFormatted: string; amountInUsd: number; etaSeconds: number; routeLabel: string } }
++
++export function FundFromAnotherChain(props: {
++  mint: string;
++  poolConfig: string;
++  raisedSoFar?: number;
++  solanaWallet?: string;
++  evmAddress?: string;
++  getQuote: (body: CrossChainQuoteBody) => Promise<QuoteView>;
++  onConfirm: (quoteRef: string) => Promise<void>;
++}) {
++  const [chain, setChain] = useState<keyof typeof USDC_BY_CHAIN>("arbitrum");
++  const [want, setWant] = useState("");
++  const [quote, setQuote] = useState<QuoteView | null>(null);
++  const [reviewed, setReviewed] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const [busy, setBusy] = useState(false);
++
++  const plan = useMemo(() => {
++    try {
++      if (!want || !props.solanaWallet || !props.evmAddress) return null;
++      return planFunding({
++        mint: props.mint, poolConfig: props.poolConfig, connectedWallet: props.solanaWallet,
++        from: { chain: chain as CrossChainQuoteBody["fromChain"], token: USDC_BY_CHAIN[chain], sender: props.evmAddress },
++        want, raisedSoFar: props.raisedSoFar,
++      });
++    } catch (e) { return { error: (e as Error).message } as const; }
++  }, [want, chain, props.mint, props.poolConfig, props.solanaWallet, props.evmAddress, props.raisedSoFar]);
++
++  const fetchQuote = async () => {
++    if (!plan || "error" in plan) return;
++    setBusy(true); setError(null); setQuote(null); setReviewed(false);
++    try { setQuote(await props.getQuote(plan.body)); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
++  };
++
++  if (!props.solanaWallet) return <p>Connect a Solana wallet to receive the curve's quote token.</p>;
++  if (!props.evmAddress) return <p>Connect the wallet you want to pay from.</p>;
++  return (
++    <section aria-label="Fund from another chain">
++      <h3>Fund from another chain</h3>
++      <label>Pay with USDC on
++        <select value={chain} onChange={(e) => setChain(e.target.value)}>
++          {Object.keys(USDC_BY_CHAIN).map((c) => <option key={c} value={c}>{c}</option>)}
++        </select>
++      </label>
++      <label>Receive on Solana ({plan && !("error" in plan) ? plan.quoteToken : "quote token"})
++        <input inputMode="decimal" value={want} onChange={(e) => setWant(e.target.value)} placeholder="0.5" />
++      </label>
++      {plan && "error" in plan ? <p role="alert">{plan.error}</p> : null}
++      {plan && !("error" in plan) && plan.graduation?.warning ? <p role="alert">{plan.graduation.warning}</p> : null}
++      <button type="button" disabled={!plan || "error" in plan || busy} onClick={fetchQuote}>Get XAU Route</button>
++      {quote ? (
++        <div>
++          <p>{quote.quote.routeLabel}: pay {quote.quote.amountInFormatted} USDC (~${quote.quote.amountInUsd.toFixed(2)}) and receive {quote.quote.amountOutFormatted} in your Solana wallet in about {quote.quote.etaSeconds}s.</p>
++          <label><input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} /> I reviewed the amount and the receiving wallet</label>
++          <button type="button" disabled={!reviewed || busy} onClick={async () => { setBusy(true); try { await props.onConfirm(quote.quoteRef); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>
++            Confirm in wallet
++          </button>
++        </div>
++      ) : null}
++      {error ? <p role="alert">{error}</p> : null}
++      <p>When it arrives, buy with the Gold Curve panel on this page.</p>
++    </section>
++  );
++}
+diff --git a/apps/web/src/lib/near-intents/fund-curve.ts b/apps/web/src/lib/near-intents/fund-curve.ts
+new file mode 100644
+index 0000000..7a9adc5
+--- /dev/null
++++ b/apps/web/src/lib/near-intents/fund-curve.ts
+@@ -0,0 +1,126 @@
++/**
++ * "Fund from another chain" for XAUConnect Gold Curve pools.
++ *
++ * Target path in the XAUConnect repo: apps/web/src/lib/near-intents/fund-curve.ts
++ * Self-contained (no imports). Pure logic: pool config -> recipe -> quote token, the body for
++ * POST /swap/cross-chain/quote, the graduation warning, and the hand-off to the existing buy
++ * widget. The buy itself stays the existing Gold Curve flow, signed in the user's Solana wallet.
++ */
++
++export type QuoteToken = "SOL" | "USDC";
++
++/** Published Gold Curve recipes (public config accounts, from the XAUConnect README). */
++export const RECIPES = {
++  "fair-sol": { quote: "SOL", config: "ExTrSGZBjzMrueBNHEALCCJmppB9zpoTSWJea4iR2gQu" },
++  "fair-usdc": { quote: "USDC", config: "Hrro7hmEAXyN9uGgMWwDwosJiuCjhXcVn6xGw5pChBn8" },
++  "shield-sol": { quote: "SOL", config: "5Edj53kfFx2da3dJy9gcxKLZF6W45QYozog5S4hNfA25" },
++  "shield-usdc": { quote: "USDC", config: "4VyDGF5jS9JqUBQqbijzVDDrtq7T6dHMURNudmwzPKZB" },
++  "distribute-sol": { quote: "SOL", config: "3sLsCEfr4aCdkczvqy3mM4nyWB4P3Ec6yd9rbQM2Xune" },
++  "distribute-usdc": { quote: "USDC", config: "DT4NYCPLJYjPN8TqHQZrHj1PovVa6xmzRKVKvruc5vWy" },
++} as const;
++
++export type RecipeId = keyof typeof RECIPES;
++
++/** Graduation threshold per quote token (XAUConnect README: 10 SOL or 750 USDC). */
++export const GRADUATION: Readonly<Record<QuoteToken, number>> = { SOL: 10, USDC: 750 };
++
++/** How the quote token is addressed on Solana in a cross-chain quote body. */
++export const QUOTE_TOKEN_ADDRESS: Readonly<Record<QuoteToken, string>> = {
++  SOL: "native",
++  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
++};
++export const QUOTE_DECIMALS: Readonly<Record<QuoteToken, number>> = { SOL: 9, USDC: 6 };
++
++const SOLANA_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
++
++export function recipeFromConfig(config: string): { id: RecipeId; quote: QuoteToken } {
++  for (const [id, r] of Object.entries(RECIPES)) if (r.config === config) return { id: id as RecipeId, quote: r.quote };
++  throw new Error(`pool config ${config} is not a Gold Curve recipe`);
++}
++
++export function toBase(amount: string, decimals: number): string {
++  if (!/^\d+(\.\d+)?$/.test(amount)) throw new Error(`bad amount ${amount}`);
++  const [w, f = ""] = amount.split(".");
++  if (f.length > decimals) throw new Error(`${amount} has more than ${decimals} decimals`);
++  return (BigInt(w) * 10n ** BigInt(decimals) + BigInt(f.padEnd(decimals, "0") || "0")).toString();
++}
++
++export interface GraduationCheck {
++  remaining: number;
++  /** share of the remaining distance this buy covers, 0..1 */
++  share: number;
++  warning?: string;
++}
++
++export function graduationCheck(quote: QuoteToken, raisedSoFar: number, buyAmount: number): GraduationCheck {
++  const remaining = Math.max(Number((GRADUATION[quote] - raisedSoFar).toFixed(QUOTE_DECIMALS[quote])), 0);
++  const share = remaining === 0 ? 0 : Math.min(buyAmount / remaining, 1);
++  let warning: string | undefined;
++  if (remaining === 0) warning = "This pool has already reached graduation. Check the token page before buying.";
++  else if (buyAmount > remaining)
++    warning = `Only ${remaining} ${quote} is left before this pool graduates. Anything above that may not fill on the curve.`;
++  return { remaining, share, warning };
++}
++
++/** Body for XAUConnect's POST /swap/cross-chain/quote with the NEAR Intents venue. */
++export interface CrossChainQuoteBody {
++  fromChain: "ethereum" | "bsc" | "polygon" | "arbitrum" | "base" | "avalanche" | "solana";
++  toChain: "solana";
++  tokenIn: string;
++  tokenOut: string;
++  amount: string;
++  swapType: "EXACT_INPUT" | "EXACT_OUTPUT";
++  slippageBps: number;
++  sender: string;
++  recipient: string;
++}
++
++export interface FundingInput {
++  mint: string;
++  /** pass the pool's config account (preferred) or a recipe id */
++  poolConfig?: string;
++  recipe?: RecipeId;
++  /** the Solana wallet connected in XAUConnect; delivery goes only here */
++  connectedWallet: string;
++  from: { chain: CrossChainQuoteBody["fromChain"]; token: string; sender: string };
++  /** EXACT_OUTPUT: quote tokens to land on Solana, decimal string, e.g. "0.5" */
++  want?: string;
++  /** EXACT_INPUT: base units of the source token to spend */
++  spend?: string;
++  slippageBps?: number;
++  /** quote tokens already raised in the pool, if the page knows it */
++  raisedSoFar?: number;
++}
++
++export interface FundingPlan {
++  recipe: RecipeId;
++  quoteToken: QuoteToken;
++  body: CrossChainQuoteBody;
++  graduation?: GraduationCheck;
++  /** existing XAUConnect token page; the user finishes the buy there */
++  handoffPath: string;
++}
++
++export function planFunding(f: FundingInput): FundingPlan {
++  if (!SOLANA_ADDR.test(f.mint)) throw new Error("mint is not a valid Solana address");
++  if (!SOLANA_ADDR.test(f.connectedWallet)) throw new Error("connect a Solana wallet first");
++  const r = f.poolConfig ? recipeFromConfig(f.poolConfig) : f.recipe && RECIPES[f.recipe] ? { id: f.recipe, quote: RECIPES[f.recipe].quote as QuoteToken } : null;
++  if (!r) throw new Error("need the pool config or a recipe id");
++  if ((f.want ? 1 : 0) + (f.spend ? 1 : 0) !== 1) throw new Error("set exactly one of want or spend");
++  if (f.from.chain === "solana" && f.from.token === QUOTE_TOKEN_ADDRESS[r.quote])
++    throw new Error(`you already hold ${r.quote} on Solana; buy directly on the token page`);
++  const body: CrossChainQuoteBody = {
++    fromChain: f.from.chain,
++    toChain: "solana",
++    tokenIn: f.from.token,
++    tokenOut: QUOTE_TOKEN_ADDRESS[r.quote],
++    amount: f.want ? toBase(f.want, QUOTE_DECIMALS[r.quote]) : (f.spend as string),
++    swapType: f.want ? "EXACT_OUTPUT" : "EXACT_INPUT",
++    slippageBps: f.slippageBps ?? 100,
++    sender: f.from.sender,
++    recipient: f.connectedWallet,
++  };
++  const plan: FundingPlan = { recipe: r.id, quoteToken: r.quote, body, handoffPath: `/token/solana/${f.mint}` };
++  if (f.want && f.raisedSoFar !== undefined) plan.graduation = graduationCheck(r.quote, f.raisedSoFar, Number(f.want));
++  return plan;
++}
