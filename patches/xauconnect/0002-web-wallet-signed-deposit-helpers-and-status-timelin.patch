@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: "Forge (Jyothish build assistant)" <forge@localhost>
+From: Akhilesh Patil <70477748+akhilexx@users.noreply.github.com>
 Date: Wed, 28 Oct 2026 22:39:01 +0530
 Subject: [PATCH 2/4] web: wallet-signed deposit helpers and status timeline
  for NEAR Intents routes

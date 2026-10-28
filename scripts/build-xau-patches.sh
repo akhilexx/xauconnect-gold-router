@@ -8,7 +8,7 @@ T="$ROOT/patches/xauconnect/tree"
 cp "$ROOT/src/xauconnect/near-intents.ts" "$T/backend/src/services/routing/near-intents.ts"
 for f in fund-curve.ts solana-deposit-ix.ts status.ts; do cp "$ROOT/src/xauconnect/$f" "$T/apps/web/src/lib/near-intents/$f"; done
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
-cd "$W"; git init -q; git config user.name "Forge (Jyothish build assistant)"; git config user.email forge@localhost
+cd "$W"; git init -q; git config user.name "Akhilesh Patil"; git config user.email "70477748+akhilexx@users.noreply.github.com"
 git commit -q --allow-empty -m base
 add() { msg="$1"; shift; for p in "$@"; do mkdir -p "$(dirname "$p")"; cp "$T/$p" "$p"; git add "$p"; done; git commit -q -m "$msg"; }
 add "routing: NEAR Intents venue for cross-chain XAU Routes (off by default)
