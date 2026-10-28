@@ -70,4 +70,12 @@ export class OneClickClient {
     if (depositMemo) q.set("depositMemo", depositMemo);
     return this.req(`/v0/status?${q}`);
   }
+
+  /**
+   * POST /v0/deposit/submit: tells 1Click the hash of a deposit the user's wallet already sent.
+   * Moves no funds by itself. Only src/execute.ts calls it, behind confirm:true + EXECUTION_ENABLED=1.
+   */
+  depositSubmit(body: { txHash: string; depositAddress: string; memo?: string; nearSenderAccount?: string }): Promise<{ status: string }> {
+    return this.req("/v0/deposit/submit", { method: "POST", body: JSON.stringify(body) });
+  }
 }
