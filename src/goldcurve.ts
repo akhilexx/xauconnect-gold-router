@@ -8,22 +8,12 @@
 
 import type { RouteIntent, Source } from "./types.ts";
 
-export type QuoteToken = "SOL" | "USDC";
-
-/** Published XAUConnect Gold Curve recipes (public config accounts, from the XAUConnect README). */
-export const RECIPES = {
-  "fair-sol": { quote: "SOL", config: "ExTrSGZBjzMrueBNHEALCCJmppB9zpoTSWJea4iR2gQu" },
-  "fair-usdc": { quote: "USDC", config: "Hrro7hmEAXyN9uGgMWwDwosJiuCjhXcVn6xGw5pChBn8" },
-  "shield-sol": { quote: "SOL", config: "5Edj53kfFx2da3dJy9gcxKLZF6W45QYozog5S4hNfA25" },
-  "shield-usdc": { quote: "USDC", config: "4VyDGF5jS9JqUBQqbijzVDDrtq7T6dHMURNudmwzPKZB" },
-  "distribute-sol": { quote: "SOL", config: "3sLsCEfr4aCdkczvqy3mM4nyWB4P3Ec6yd9rbQM2Xune" },
-  "distribute-usdc": { quote: "USDC", config: "DT4NYCPLJYjPN8TqHQZrHj1PovVa6xmzRKVKvruc5vWy" },
-} as const satisfies Record<string, { quote: QuoteToken; config: string }>;
-
-export type RecipeId = keyof typeof RECIPES;
-
-/** Graduation threshold per quote token (XAUConnect README: exactly 10 SOL or 750 USDC). */
-export const GRADUATION: Record<QuoteToken, number> = { SOL: 10, USDC: 750 };
+// Recipes and graduation thresholds live in the self-contained XAUConnect module so the router
+// and the XAUConnect patch use the same table.
+import { GRADUATION, RECIPES } from "./xauconnect/fund-curve.ts";
+import type { QuoteToken, RecipeId } from "./xauconnect/fund-curve.ts";
+export { GRADUATION, RECIPES };
+export type { QuoteToken, RecipeId };
 
 const SOLANA_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 

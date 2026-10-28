@@ -11,6 +11,8 @@ import { OneClickClient } from "./oneclick.ts";
 import { planRoute } from "./router.ts";
 import { goldCurveIntent, RECIPES, type RecipeId } from "./goldcurve.ts";
 import type { Delivery, RecipientType, Source } from "./types.ts";
+import { planFunding } from "./xauconnect/fund-curve.ts";
+import { toUserError } from "./xauconnect/near-intents.ts";
 
 const EVM = new Set(["eth", "arb", "base", "op", "pol", "bsc", "avax", "gnosis", "bera", "scroll", "monad", "xlayer", "abs", "plasma"]);
 
@@ -86,12 +88,38 @@ async function main() {
     console.log(`Next: buy on the existing XAUConnect token page with your Solana wallet: ${handoffUrl}`);
     return;
   }
+  if (cmd === "fund") {
+    // "Fund from another chain" through the XAUConnect venue adapter (same code as the patch). Dry quote only.
+    // fund --mint MINT (--pool-config CFG | --recipe ID) --wallet SOL_ADDR --from-chain arbitrum --token-in 0x..|native
+    //      --sender 0x.. (--want 0.5 | --spend BASE_UNITS) [--raised 3.2] [--slippage 100]
+    const get = (k: string) => { const i = rest.indexOf(k); return i >= 0 ? rest[i + 1] : undefined; };
+    const deps = await buildDeps();
+    const { venueFromEnv } = await import("./server.ts");
+    const venue = venueFromEnv(process.env, deps.mock ? deps.registry.tokens : undefined);
+    const plan = planFunding({
+      mint: get("--mint") ?? "", poolConfig: get("--pool-config"), recipe: get("--recipe") as RecipeId | undefined,
+      connectedWallet: get("--wallet") ?? process.env.RECIPIENT_SOL ?? "",
+      from: { chain: (get("--from-chain") ?? "arbitrum") as "arbitrum", token: get("--token-in") ?? "", sender: get("--sender") ?? process.env.REFUND_EVM ?? "" },
+      want: get("--want"), spend: get("--spend"), raisedSoFar: get("--raised") !== undefined ? Number(get("--raised")) : undefined,
+      slippageBps: get("--slippage") ? Number(get("--slippage")) : undefined,
+    });
+    try {
+      const q = await venue.quote(plan.body);
+      console.log(`${deps.mock ? "[MOCK MODE: simulated quotes]\n" : ""}Fund from another chain: ${plan.recipe} (quote ${plan.quoteToken}), dry quote, nothing sent`);
+      console.log(`  ${q.routeLabel}: send ${q.amountInFormatted} from ${q.fromChain} (~$${q.amountInUsd.toFixed(2)}) -> ${q.amountOutFormatted} ${plan.quoteToken} on Solana (min ${q.minAmountOut} base units), cost ${q.costBps} bps, ~${q.etaSeconds}s`);
+      if (plan.graduation) console.log(`  graduation: ${plan.graduation.remaining} ${plan.quoteToken} left, this covers ${(plan.graduation.share * 100).toFixed(1)}%${plan.graduation.warning ? `\n  WARNING: ${plan.graduation.warning}` : ""}`);
+      console.log(`  next: finish the buy on the existing token page with your Solana wallet: https://xauconnect.com${plan.handoffPath}`);
+    } catch (e) {
+      console.log(`no route: ${toUserError(e)} (${(e as Error).message})`);
+    }
+    return;
+  }
   if (cmd === "status") {
     const c = new OneClickClient({ baseUrl: process.env.ONECLICK_BASE_URL, jwt: process.env.ONECLICK_JWT });
     console.log(JSON.stringify(await c.status(rest[0], rest[1]), null, 2));
     return;
   }
-  console.log("usage: cli.ts tokens [SYMBOL] | goldcurve --mint MINT --recipe RECIPE --wallet SOL_ADDR --from ... | plan --from AMT:SYM:CHAIN[:REFUND] ... --to SYM:CHAIN[:DESTINATION_CHAIN|INTENTS[:RECIPIENT]] ... [--slippage BPS] [--json] | status DEPOSIT_ADDRESS");
+  console.log("usage: cli.ts tokens [SYMBOL] | goldcurve --mint MINT --recipe RECIPE --wallet SOL_ADDR --from ... | plan --from AMT:SYM:CHAIN[:REFUND] ... --to SYM:CHAIN[:DESTINATION_CHAIN|INTENTS[:RECIPIENT]] ... [--slippage BPS] [--json] | fund --mint MINT --pool-config CFG --wallet SOL_ADDR --from-chain CHAIN --token-in ADDR|native --sender ADDR (--want N | --spend BASE) [--raised N] | status DEPOSIT_ADDRESS");
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
