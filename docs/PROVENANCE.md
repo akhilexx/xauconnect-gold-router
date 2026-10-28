@@ -31,7 +31,10 @@ The landing page (https://nearhackathon.com/#apply, same date) says: "01 Build y
 | 28 Oct 2026, 13:53 | Design spike, 6 commits: 1Click client, token registry, units, policy engine, router, offline mock, CLI, HTTP API, demo page, tests, README |
 | 28 Oct 2026, evening | Gold Curve funding planner (`src/goldcurve.ts`, `goldcurve` CLI command), Solana delivery in the default policy, project metadata, docs reworked around the real XAUConnect codebase, backlog and test stubs |
 | 28 Oct 2026, 22:25-23:00 | Backlog 1-3, 5 commits: NEAR Intents venue adapter for XAUConnect (`src/xauconnect/near-intents.ts`), deposit flow behind confirm + `EXECUTION_ENABLED` (`src/execute.ts`, Solana instruction bytes, status poller), "Fund from another chain" (`src/xauconnect/fund-curve.ts`, `fund` CLI, HTTP routes), the `patches/xauconnect/` export for the XAUConnect repo, docs. 53 tests pass. Live 1Click use was dry quotes only (docs/live-dry-quotes.md) |
-| from then until 14 Nov 2026 | Remaining backlog items (docs/BACKLOG.md 4-6), each as its own dated commit |
+| 29 Oct 2026, 03:56-03:58 | Hosted-demo mode (`DEMO_PUBLIC=1`, `render.yaml`, docs/HOSTED-DEMO.md), XAU-shaped endpoint on the router, patches checked against XAUConnect public main `73c354c` (commits ffd0a05, 6754330, b9514a0) |
+| 29 Oct 2026, 04:06 | Backlog 4, router side (commit 1e9e6aa): XAUConnect same-chain quote as a comparison provider (`src/xauconnect-quote.ts`), cross-provider ranking, hand-off legs refused by execute. Tested against a schema-shaped fixture and mock; no live call to xauconnect.com yet |
+| 29 Oct 2026, 04:10 | Backlog 5 (commit 077f396): agent tool manifest and endpoint (`src/agent.ts`, `src/jsonschema.ts`), per-agent keys, daily budget, output allow-list, audit log. 84 tests pass, 0 todo |
+| from then until 14 Nov 2026 | Remaining backlog items (docs/BACKLOG.md 4 and 5 XAUConnect-side parts, 6), each as its own dated commit |
 
 Every commit keeps its real author date. Commits were written by the owner's AI build assistant (see below). Author names may be set to the owner's GitHub identity when published; dates are never changed.
 

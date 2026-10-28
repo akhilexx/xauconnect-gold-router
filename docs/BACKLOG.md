@@ -10,7 +10,7 @@ Constraints:
 - XAUConnect branding rule: user-facing text never names third-party DEXs, and routes are "XAU Routes/Pools". In the UI, label the route "XAU Route · settled on NEAR Intents". **The owner must confirm** that naming NEAR Intents is OK, since judges need to see it.
 - Secrets only in `.env` (`ONECLICK_JWT`). Never commit `.env`.
 
-Status key: [x] done, [ ] to do. Tests: R uses `node:test` (stubs in `test/backlog.test.ts`). X uses the backend's existing runner: **check `backend/package.json`** for vitest or jest before writing tests. Contracts use Hardhat (`pnpm contracts:test`), but no contract change is planned.
+Status key: [x] done, [ ] to do. Tests: R uses `node:test` (no todo stubs remain; items 4-5 are in `test/xauconnect-quote.test.ts`, `test/agent.test.ts`, `test/agent-http.test.ts`). X uses the backend's existing runner: **check `backend/package.json`** for vitest or jest before writing tests. Contracts use Hardhat (`pnpm contracts:test`), but no contract change is planned.
 
 ## 0. Done in R (28 Oct)
 - [x] 1Click client, registry, policy, router, mock, CLI, HTTP API, demo page (11 tests)
@@ -84,16 +84,17 @@ The X source wasn't available while this was built: it is on the owner's Mac. So
 - CLI: `node src/cli.ts fund ...`; HTTP: `POST /v1/goldcurve/fund`. Live dry runs: docs/live-dry-quotes.md
 
 ## 4. XAUT "gold from any chain" (X + R, P1)
-- [ ] In R: add XAUConnect's same-chain quote (`POST https://xauconnect.com/api/swap/quote`, headers `X-Client-Source: agent`) as a comparison provider for same-chain legs (e.g. USDT@eth -> XAUT@eth). Rank across providers.
+- [x] In R (29 Oct, commit 1e9e6aa): `src/xauconnect-quote.ts` asks XAUConnect's same-chain quote (`POST https://xauconnect.com/api/swap/quote`, headers `X-Client-Source: agent`, body in XAUConnect's `QuoteRequest` shape) for same-chain wallet legs (e.g. USDT@eth -> XAUT@eth) and maps `best.amountOutAfterFee` to a RouteOption with provider `xauconnect`. The router ranks across providers by cost, then ETA. Off unless `XAUCONNECT_COMPARE=1`. These legs are a hand-off to xauconnect.com/swap; execute refuses them (`HANDOFF_ONLY`). Not verified: a live call to xauconnect.com (the fixture is schema-shaped, values illustrative).
 - [ ] In X: a preset "Buy gold (XAUT)" on `/swap`, with destination XAUT on Ethereum or kept in a NEAR Intents balance (`recipientType: INTENTS`, NEAR account from the user).
-- Tests: the XAUConnect quote fixture maps to RouteOption; mixed-provider ranking; an XAUConnect timeout does not block NEAR Intents legs.
+- Tests (R `test/xauconnect-quote.test.ts`, 5): the fixture maps to RouteOption (venue names dropped, simulated/quote-only rejected); request shape and header; mixed-provider ranking by cost then ETA; a timeout or HTTP 500 becomes a failure entry and NEAR Intents legs still plan; execute refuses hand-off legs before any 1Click call.
 
 ## 5. Agent / tool endpoint (R, P1)
-- [ ] `GET /.well-known/agent-tools.json` (or an MCP server) with `plan_gold_route`, `plan_gold_curve_funding`, `get_route_status` and `list_supported_assets`, plus JSON Schemas. Add it to XAUConnect's existing agent action manifest (X) as well.
-- [ ] Per-agent keys and policy (daily USD budget, allowed outputs), plus an audit log.
-- Tests: the manifest validates; the budget blocks once exhausted; an unknown key returns 401 without quoting; the audit log records each decision.
+- [x] R (29 Oct, commit 077f396): `GET /.well-known/agent-tools.json` with `plan_gold_route`, `plan_gold_curve_funding`, `get_route_status` and `list_supported_assets`, each with a JSON Schema; `POST /v1/agent/tools/:name` validates arguments against it (`src/jsonschema.ts`, zero dependencies). All tools are read-only.
+- [ ] X: add the tools to XAUConnect's existing agent action manifest (needs the real file; not done).
+- [x] Per-agent keys (`AGENT_KEYS`, SHA-256 hashes only, revocable) and per-key policy: daily USD planning budget (UTC day, reserved before quoting) and an output allow-list on top of the server policy. Audit log of every allow/deny/error (memory, optional JSONL `AGENT_AUDIT_LOG`); `GET /v1/agent/audit` returns the caller's own entries. Budgets and the log reset on restart.
+- Tests (R `test/agent.test.ts` 6, `test/agent-http.test.ts` 2): the manifest validates against its schema and each tool's example against its input schema; the budget blocks once exhausted and resets next UTC day; unknown, revoked or missing keys return 401 with zero quotes; disallowed outputs 403 with zero quotes; the audit log records request shape, decision and reason, never the key.
 
 ## 6. Polish (P2)
 - [ ] 1Click JWT via partners.near-intents.org (removes the 0.2% fee, Q-006); optional confidential swaps toggle.
-- [ ] Hosted demo (Q-012: a plus; keep it up until at least 18 Nov, ideally 25 Nov). Prepared 29 Oct: `DEMO_PUBLIC=1` read-only mode, `render.yaml`, docs/HOSTED-DEMO.md, test/demo.test.ts (6 tests), local live smoke OK. Remaining: the owner/King Bot deploys it on Render.
-- [ ] Refresh the README numbers, take screenshots, record the video, update PROVENANCE, and tag `hackathon-submission` on X.
+- [ ] Hosted demo (Q-012: a plus; keep it up until at least 18 Nov, ideally 25 Nov). Prepared 29 Oct: `DEMO_PUBLIC=1` read-only mode, `render.yaml`, docs/HOSTED-DEMO.md, test/demo.test.ts (6 tests), local live smoke OK. Re-checked 29 Oct after items 4-5: `render.yaml`'s start command `node src/server.ts` with `DEMO_PUBLIC=1`, `MOCK=0` starts, loads the live token list, `/health` ok, page and agent manifest 200, deposit submit 403 `DEMO_READ_ONLY`, agent call without a key 401. Remaining: the owner/King Bot deploys it on Render.
+- [ ] Refresh the README numbers (done 29 Oct for test counts and items 4-5; refresh the bps examples at submit time), take screenshots, record the video, update PROVENANCE (done 29 Oct for items 4-5), and tag `hackathon-submission` on X.

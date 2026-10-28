@@ -26,7 +26,7 @@ Requires Node.js >= 23.6, which runs TypeScript directly. There is no install st
 
 1. Offline, no network:
    ```sh
-   npm test        # -> 71 pass, 0 fail, 7 todo (todo = backlog items 4-5, not built)
+   npm test        # -> 84 pass, 0 fail, 0 todo
    npm run demo    # -> MOCK MODE plan: 2 legs into XAUT, INTENTS delivery picked as cheaper
    ```
 2. Live NEAR Intents quotes (dry run; nothing is signed or sent). Use any public addresses you own:
@@ -50,6 +50,8 @@ Requires Node.js >= 23.6, which runs TypeScript directly. There is no install st
 5. XAUConnect endpoint, as patched: `POST /v1/xau/swap/cross-chain/near-intents/quote` with a real XAUConnect `CrossChainQuoteRequest` returns the `CrossChainQuote` shape that patch 0005 serves at `/swap/cross-chain/near-intents/quote` (provider `near-intents`, bridgeName "XAU Route"). `.../build` returns 403 in this repo.
 6. Hosted-demo mode: `DEMO_PUBLIC=1 npm start` runs read-only. Execute, deposit submit and build always return **403 DEMO_READ_ONLY**, POSTs are rate limited per IP, and it needs no secrets. Deploy plan: [docs/HOSTED-DEMO.md](docs/HOSTED-DEMO.md), `render.yaml`. *Not deployed yet.*
 7. Policy guardrails: `POLICY_MAX_USD_PER_LEG=50 node src/cli.ts plan --from 100:USDC:arb:$A --to XAUT:eth:DESTINATION_CHAIN:$A` -> `BLOCKED by policy`, and no quote is requested.
+8. Agent tools: `GET /.well-known/agent-tools.json` lists four read-only tools (`plan_gold_route`, `plan_gold_curve_funding`, `get_route_status`, `list_supported_assets`), each with a JSON Schema. Call one with `POST /v1/agent/tools/<name>` and `Authorization: Bearer <key>`. Keys are configured as SHA-256 hashes in `AGENT_KEYS` (see `.env.example`; `newAgentKey()` in `src/agent.ts` makes one). Without a known key you get **401** and no quote is requested. Each key has a daily USD planning budget (**429 BUDGET_EXHAUSTED** once used up) and an optional output allow-list (**403 OUTPUT_NOT_ALLOWED**). `GET /v1/agent/audit` returns the caller's own allow/deny decisions. Budgets and the audit log live in memory and reset on restart (`AGENT_AUDIT_LOG=path` also appends JSONL).
+9. Same-chain comparison with XAUConnect's own quote: `MOCK=1 XAUCONNECT_COMPARE=1 node src/cli.ts plan --from 100:USDT:eth:$A --from 40:USDC:arb:$A --to XAUT:eth:DESTINATION_CHAIN:$A` -> the USDT@eth leg goes "via XAU Route same-chain" (mock 40 bps beats the 60 bps NEAR Intents mock) and is a hand-off to xauconnect.com/swap; the USDC@arb leg stays on NEAR Intents. Execute refuses hand-off legs with `HANDOFF_ONLY` before any 1Click call, even with both execution gates open. A slow or failing XAUConnect quote becomes a `failures` entry and never holds back NEAR Intents legs (5 s timeout).
 
 Example live output (28 Oct 2026, dry run):
 ```
@@ -93,7 +95,9 @@ Dotted lines are settlement and the user's own signing. The router never holds k
 | `src/oneclick.ts` | 1Click API client (tokens, quote, status), optional JWT |
 | `src/registry.ts` | Symbol + chain -> 1Click `assetId` from the live token list |
 | `src/policy.ts` | Spending guardrails, configurable via env |
-| `src/router.ts` | Fan-out, ranking, plan assembly |
+| `src/router.ts` | Fan-out, ranking (cost, then ETA) across NEAR Intents and optional comparison providers, plan assembly |
+| `src/xauconnect-quote.ts` | XAUConnect same-chain quote (`POST /api/swap/quote`, `X-Client-Source: agent`) as a comparison provider; quote only, hand-off legs (`XAUCONNECT_COMPARE=1`) |
+| `src/agent.ts`, `src/jsonschema.ts` | Agent tool manifest + JSON Schemas, per-agent keys (hashes only), daily budget, output allow-list, audit log |
 | `src/goldcurve.ts` | Gold Curve funding intents for the router (recipes come from `src/xauconnect/fund-curve.ts`) |
 | `src/execute.ts` | Deposit flow: confirm + `EXECUTION_ENABLED=1` gates, policy re-check, 60s re-quote, slippage abort, one `dry:false` per leg, unsigned EVM/Solana instructions |
 | `src/xauconnect/near-intents.ts` | NEAR Intents venue for XAUConnect (shipped unchanged as patch 0001): 7-chain key map, token resolution, dry quotes as "XAU Route", gated build, status, user errors, Express-agnostic handlers |
@@ -102,9 +106,9 @@ Dotted lines are settlement and the user's own signing. The router never holds k
 | `src/xauconnect/solana-deposit-ix.ts`, `src/xauconnect/status.ts` | Byte-exact Solana transfer data; status poller and timeline copy |
 | `patches/xauconnect/` | `git am` patches 0001-0006 (verified to apply onto byte-identical copies of XAUConnect public main `73c354c`) + `INTEGRATION.md` (3 hand edits) |
 | `scripts/typecheck-xau-mirror.sh` | Type-checks the patched backend and web files under XAUConnect's real tsconfig settings (NodeNext, strict, noUncheckedIndexedAccess) |
-| `src/mock.ts` | Offline deterministic quote simulator for tests |
+| `src/mock.ts` | Offline deterministic quote simulators (1Click and XAUConnect) for tests |
 | `src/cli.ts`, `src/server.ts`, `web/index.html` | Interfaces |
-| `test/` | `node:test` tests (71 pass). `test/backlog.test.ts` holds 7 todo stubs for backlog items 4-5 |
+| `test/` | `node:test` tests (84 pass, 0 todo) |
 
 ## What is new vs pre-existing
 **Pre-existing XAUConnect (baseline, before 19 Oct 2026; not submitted for judging):** the public repo [akhilexx/xauconnect](https://github.com/akhilexx/xauconnect) (Turborepo: `apps/web` Next.js 15, `apps/mobile` Expo, `backend` Express API, Prisma/PostgreSQL, `packages/contracts|sdk|ui|utils`). That baseline includes:
@@ -142,7 +146,9 @@ These are the owner's figures, read from the XAUConnect production database on 2
 | XAUConnect venue adapter + XAU-shaped handlers | Built and tested here (same bytes as patches 0001/0005); live dry quotes run through them; patches apply with `git am` onto copies of public main `73c354c`; backend and web type-check under XAUConnect's real tsconfig settings. Not yet applied in the real monorepo, and `pnpm typecheck/build` not yet run there |
 | XAUConnect UI (status timeline, Fund-from-another-chain panel) | Written and type-checked; not rendered or run in the app |
 | Hand edits to existing XAUConnect files | Anchors checked against public main `73c354c`; not applied |
-| Hosted demo | `DEMO_PUBLIC=1` mode built, tested and run locally against live dry quotes; not deployed |
+| XAUConnect same-chain comparison (backlog 4, router side) | Built and tested against a schema-shaped fixture (XAUConnect's `AggregatedQuote` schema at `73c354c`; values illustrative) and a price-only mock. Off by default. **Not yet called against live xauconnect.com.** The XAUConnect-side "Buy gold (XAUT)" preset is not built |
+| Agent tools (backlog 5) | Built and tested (unit + HTTP in MOCK and `DEMO_PUBLIC` mode); manifest served by the live-mode server locally. No agent keys are configured on any server yet. Not yet added to XAUConnect's own agent action manifest |
+| Hosted demo | `DEMO_PUBLIC=1` mode built and tested. `render.yaml`'s start command (`node src/server.ts`) run locally on 29 Oct with `DEMO_PUBLIC=1`, `MOCK=0`: live token list loaded, `/health` ok, page and agent manifest 200, deposit submit 403. Not deployed |
 
 ## Setup
 ```sh
