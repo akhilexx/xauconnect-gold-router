@@ -1,0 +1,29 @@
+# Render Blueprint for the public, read-only hosted demo (docs/HOSTED-DEMO.md).
+# Zero secrets: no JWT, no keys, no wallet. Execution is hard-off in DEMO_PUBLIC mode.
+services:
+  - type: web
+    name: xauconnect-gold-router-demo
+    runtime: node
+    plan: free
+    buildCommand: "echo 'zero dependencies, nothing to build'"
+    startCommand: node src/server.ts
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: DEMO_PUBLIC
+        value: "1"
+      - key: MOCK
+        value: "0"        # live 1Click dry quotes; set "1" for a fully offline fixture demo
+      - key: NEAR_INTENTS_ENABLED
+        value: "true"
+      - key: DEMO_RATE_PER_MIN
+        value: "30"
+      # Public demo addresses used only to prefill the page and as dry-quote recipients.
+      # Fill in once the owner confirms which public addresses to show (see HOSTED-DEMO.md).
+      - key: RECIPIENT_EVM
+        sync: false
+      - key: RECIPIENT_SOL
+        sync: false
+      # Never set on this service: EXECUTION_ENABLED, ONECLICK_JWT, any key or seed.

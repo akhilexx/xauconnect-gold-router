@@ -11,6 +11,8 @@
 </style>
 <h1>Gold Router</h1>
 <p class="muted">Turn stablecoins scattered across chains into tokenized gold (XAUT) in one plan. Quotes come from NEAR Intents 1Click (dry run). Nothing is signed or sent from this page.</p>
+<p id="mode" style="background:#fff7dd;border:1px solid #e8d38a;padding:.4rem .6rem"><!--MODE--></p>
+<h2>1. Plan a gold route</h2>
 <textarea id="intent">{
   "sources": [
     { "symbol": "USDC", "chain": "arb", "amount": "100", "refundTo": "0xYourArbitrumAddress" },
@@ -23,6 +25,26 @@
 }</textarea>
 <p><button id="go">Plan route</button></p>
 <div id="out"></div>
+
+<h2>2. Fund a Gold Curve from another chain</h2>
+<p class="muted">XAUGC is a live Gold Curve on Solana (fair recipe, SOL quote, graduates at 10 SOL). Pay with USDC on an EVM chain and get SOL in your Solana wallet, ready to buy on the curve. This is a dry quote.</p>
+<label>Pay with USDC on <select id="fchain"><option>arbitrum</option><option>base</option><option>ethereum</option><option>polygon</option></select></label>
+<label>SOL wanted <input id="fwant" value="0.25" size="6" /></label><br />
+<label>EVM sender <input id="fsender" value="0xYourEthereumAddress" size="44" /></label><br />
+<label>Solana wallet <input id="fsol" value="YourSolanaAddress" size="46" /></label>
+<p><button id="fund">Get XAU Route</button></p>
+<div id="fout"></div>
+
+<h2>3. The XAUConnect endpoint (same handlers as the patch)</h2>
+<p class="muted">POST /swap/cross-chain/near-intents/quote, given a real XAUConnect CrossChainQuoteRequest. Build stays 403 on this server.</p>
+<textarea id="xreq" style="height:150px">{
+  "fromChainKey": "arbitrum", "toChainKey": "solana",
+  "tokenIn": "USDC_ARBITRUM", "tokenOut": "native",
+  "amountIn": "40000000", "slippageBps": 100,
+  "taker": "0xYourEthereumAddress", "takerDestination": "YourSolanaAddress"
+}</textarea>
+<p><button id="xq">Quote</button> <button id="xb">Try build (shows the gate)</button></p>
+<pre id="xout" style="white-space:pre-wrap;font-size:12px"></pre>
 <script>
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 document.getElementById("go").onclick = async () => {
@@ -39,6 +61,34 @@ document.getElementById("go").onclick = async () => {
     for (const f of p.failures) h += `<p class="bad">No quote: ${esc(f.source.symbol)}@${esc(f.source.chain)} → ${esc(f.delivery.symbol)}@${esc(f.delivery.chain)}: ${esc(f.error)}</p>`;
     out.innerHTML = h;
   } catch (e) { out.innerHTML = `<p class="bad">${esc(e.message)}</p>`; }
+};
+const USDC = { arbitrum: "0xaf88d065e77c8cc2239327c5edb3a432268e5831", base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  ethereum: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", polygon: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" };
+const postJson = async (path, body) => (await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+document.getElementById("fund").onclick = async () => {
+  const out = document.getElementById("fout"); out.textContent = "Quoting...";
+  const chain = document.getElementById("fchain").value;
+  try {
+    const p = await postJson("/v1/goldcurve/fund", { mint: "HXXMuNxDShXhK6QGd4CczTgSiXr1YqNbUdpg9rTbWj5r", poolConfig: "ExTrSGZBjzMrueBNHEALCCJmppB9zpoTSWJea4iR2gQu",
+      connectedWallet: document.getElementById("fsol").value, from: { chain, token: USDC[chain], sender: document.getElementById("fsender").value },
+      want: document.getElementById("fwant").value, raisedSoFar: 0 });
+    if (p.error) { out.innerHTML = `<p class="bad">${esc(p.error)}</p>`; return; }
+    const q = p.quote;
+    out.innerHTML = `<p><b>${esc(q.routeLabel)}</b>: pay ${esc(q.amountInFormatted)} USDC on ${esc(chain)} (~$${q.amountInUsd.toFixed(2)}), receive ${esc(q.amountOutFormatted)} SOL in about ${q.etaSeconds}s. Recipe ${esc(p.recipe)}.</p>`
+      + (p.graduation && p.graduation.warning ? `<p class="bad">${esc(p.graduation.warning)}</p>` : "")
+      + `<p>Next step: buy on the curve at <a href="${esc(p.handoffUrl)}" target="_blank" rel="noreferrer">${esc(p.handoffUrl)}</a></p><p class="muted">Dry quote. No deposit address was requested.</p>`;
+  } catch (e) { out.innerHTML = `<p class="bad">${esc(e.message)}</p>`; }
+};
+let lastRef = "";
+const xreq = document.getElementById("xreq"); xreq.value = xreq.value.replace("USDC_ARBITRUM", USDC.arbitrum);
+document.getElementById("xq").onclick = async () => {
+  const out = document.getElementById("xout"); out.textContent = "Quoting...";
+  try { const r = await postJson("/v1/xau/swap/cross-chain/near-intents/quote", JSON.parse(document.getElementById("xreq").value));
+    lastRef = r.quoteRef || ""; out.textContent = JSON.stringify(r.crossChainQuote || r, null, 2); } catch (e) { out.textContent = e.message; }
+};
+document.getElementById("xb").onclick = async () => {
+  const out = document.getElementById("xout");
+  try { out.textContent = JSON.stringify(await postJson("/v1/xau/swap/cross-chain/near-intents/build", { quoteRef: lastRef, confirm: true }), null, 2); } catch (e) { out.textContent = e.message; }
 };
 </script>
 </html>

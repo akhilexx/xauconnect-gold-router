@@ -57,3 +57,10 @@ quote  base USDC 25 -> solana SOL
 ```
 
 No dry:false request was made and nothing was deposited or signed. These are dry quotes only, not executions.
+
+## 29 Oct 2026, 03:55 IST: hosted-demo mode, run locally (`DEMO_PUBLIC=1 MOCK=0`)
+
+All quotes are dry. No deposit address was requested.
+- `POST /v1/goldcurve/fund` XAUGC (fair-sol), want 0.25 SOL, pay Arbitrum USDC: "XAU Route", amountIn 25.879422 USDC (~$25.87), ETA 22 s.
+- `POST /v1/xau/swap/cross-chain/near-intents/quote` Base USDC 25 → SOL: amountOut 243956922, minAmountOut 241517352, 32 s.
+- `POST /v1/xau/swap/cross-chain/near-intents/build` → 403 `DEMO_READ_ONLY`.

@@ -26,7 +26,7 @@ Requires Node.js >= 23.6, which runs TypeScript directly. There is no install st
 
 1. Offline, no network:
    ```sh
-   npm test        # -> 53 pass, 0 fail, 7 todo (todo = backlog items 4-5, not built)
+   npm test        # -> 71 pass, 0 fail, 7 todo (todo = backlog items 4-5, not built)
    npm run demo    # -> MOCK MODE plan: 2 legs into XAUT, INTENTS delivery picked as cheaper
    ```
 2. Live NEAR Intents quotes (dry run; nothing is signed or sent). Use any public addresses you own:
@@ -47,7 +47,9 @@ Requires Node.js >= 23.6, which runs TypeScript directly. There is no install st
    ```
 3. HTTP API and demo page: `npm start` (or `MOCK=1 npm start`), open `http://localhost:8787/`, edit the intent, click **Plan route**. Or run `curl -X POST localhost:8787/v1/routes -d @examples/intent.json`.
 4. Deposit flow gates: run `POST /v1/routes`, then `POST /v1/routes/<intentId>/execute {"leg":0}`. You get **403 CONFIRM_REQUIRED**. With `"confirm":true` you get **403 EXECUTION_DISABLED** unless the server runs with `EXECUTION_ENABLED=1`. `MOCK=1 EXECUTION_ENABLED=1 npm start` shows the unsigned output (ERC-20 `transfer` calldata to a fake `0x…dEaD` deposit address) without touching the network.
-5. Policy guardrails: `POLICY_MAX_USD_PER_LEG=50 node src/cli.ts plan --from 100:USDC:arb:$A --to XAUT:eth:DESTINATION_CHAIN:$A` -> `BLOCKED by policy`, and no quote is requested.
+5. XAUConnect endpoint, as patched: `POST /v1/xau/swap/cross-chain/near-intents/quote` with a real XAUConnect `CrossChainQuoteRequest` returns the `CrossChainQuote` shape that patch 0005 serves at `/swap/cross-chain/near-intents/quote` (provider `near-intents`, bridgeName "XAU Route"). `.../build` returns 403 in this repo.
+6. Hosted-demo mode: `DEMO_PUBLIC=1 npm start` runs read-only. Execute, deposit submit and build always return **403 DEMO_READ_ONLY**, POSTs are rate limited per IP, and it needs no secrets. Deploy plan: [docs/HOSTED-DEMO.md](docs/HOSTED-DEMO.md), `render.yaml`. *Not deployed yet.*
+7. Policy guardrails: `POLICY_MAX_USD_PER_LEG=50 node src/cli.ts plan --from 100:USDC:arb:$A --to XAUT:eth:DESTINATION_CHAIN:$A` -> `BLOCKED by policy`, and no quote is requested.
 
 Example live output (28 Oct 2026, dry run):
 ```
@@ -66,7 +68,7 @@ flowchart LR
     F[Fan-out + rank]
     GC[Gold Curve funding planner]
     EX[Deposit flow<br/>confirm + EXECUTION_ENABLED]
-    ADP[XAUConnect venue adapter<br/>src/xauconnect/near-intents.ts<br/>= patch 0001 -> backend/src/services/routing/near-intents.ts]
+    ADP[XAUConnect venue adapter + XAU-shaped handlers<br/>src/xauconnect/near-intents*.ts<br/>= patches 0001 + 0005 -> /swap/cross-chain/near-intents/*]
   end
   subgraph OLD["PRE-EXISTING XAUConnect (baseline, not judged)"]
     WEB[apps/web swap-panel.tsx]
@@ -95,12 +97,14 @@ Dotted lines are settlement and the user's own signing. The router never holds k
 | `src/goldcurve.ts` | Gold Curve funding intents for the router (recipes come from `src/xauconnect/fund-curve.ts`) |
 | `src/execute.ts` | Deposit flow: confirm + `EXECUTION_ENABLED=1` gates, policy re-check, 60s re-quote, slippage abort, one `dry:false` per leg, unsigned EVM/Solana instructions |
 | `src/xauconnect/near-intents.ts` | NEAR Intents venue for XAUConnect (shipped unchanged as patch 0001): 7-chain key map, token resolution, dry quotes as "XAU Route", gated build, status, user errors, Express-agnostic handlers |
+| `src/xauconnect/near-intents-xau.ts` | Maps XAUConnect's real `CrossChainQuoteRequest` to the venue and back to its `CrossChainQuote` shape; `{error:{code,message}}` envelope (patch 0005) |
 | `src/xauconnect/fund-curve.ts` | "Fund from another chain": pool config -> recipe -> quote token, exact-output body, graduation warning |
 | `src/xauconnect/solana-deposit-ix.ts`, `src/xauconnect/status.ts` | Byte-exact Solana transfer data; status poller and timeline copy |
-| `patches/xauconnect/` | `git am` patches (new files) + `INTEGRATION.md` hand edits for existing XAUConnect files |
+| `patches/xauconnect/` | `git am` patches 0001-0006 (verified to apply onto byte-identical copies of XAUConnect public main `73c354c`) + `INTEGRATION.md` (3 hand edits) |
+| `scripts/typecheck-xau-mirror.sh` | Type-checks the patched backend and web files under XAUConnect's real tsconfig settings (NodeNext, strict, noUncheckedIndexedAccess) |
 | `src/mock.ts` | Offline deterministic quote simulator for tests |
 | `src/cli.ts`, `src/server.ts`, `web/index.html` | Interfaces |
-| `test/` | `node:test` tests (53). `test/backlog.test.ts` holds 7 todo stubs for backlog items 4-5 |
+| `test/` | `node:test` tests (71 pass). `test/backlog.test.ts` holds 7 todo stubs for backlog items 4-5 |
 
 ## What is new vs pre-existing
 **Pre-existing XAUConnect (baseline, before 19 Oct 2026; not submitted for judging):** the public repo [akhilexx/xauconnect](https://github.com/akhilexx/xauconnect) (Turborepo: `apps/web` Next.js 15, `apps/mobile` Expo, `backend` Express API, Prisma/PostgreSQL, `packages/contracts|sdk|ui|utils`). That baseline includes:
@@ -113,8 +117,9 @@ Dotted lines are settlement and the user's own signing. The router never holds k
 **New (hackathon window):**
 - this repository, all of it, with its real git history starting 28 Oct 2026: the router, policy engine, Gold Curve funding planner, deposit flow, XAUConnect venue adapter, Fund-from-another-chain module, CLI, API, demo page, and the XAUConnect patches. HACKATHON.md Q-001: "Code before 2026-11-01? Yes, from the announcement on 2026-10-19 ... Earlier commits are baseline." No commit in this repository predates 28 Oct 2026, and none of its code is copied from XAUConnect.
 - a branch `near-intents-hackathon` on akhilexx/xauconnect, planned but **not created yet**. It is to be tagged `pre-hackathon` at its base and `hackathon-submission` at the end (per Q-003).
-  - Its new files are the patches in `patches/xauconnect/` (0001-0004).
-  - Its edits to existing files are described in `patches/xauconnect/INTEGRATION.md`. They were written without access to the XAUConnect source, so they need adapting.
+  - Its base is public main `73c354c` (19 Oct 2026 01:30 IST, before the announcement), the planned `pre-hackathon` tag.
+  - Patches 0001-0005 add new files. Patch 0006 is a real diff to `backend/src/routes/swap.ts` (mounts the sub-router) and `backend/package.json` (test script), checked against byte-identical public copies of those files.
+  - Three edits to existing UI and config files (`.env.example`, swap panel, Gold Curve panel) are hand edits with verified anchors in `patches/xauconnect/INTEGRATION.md`.
   - Diff link: *(added when the branch exists)*.
 
 Full log: [docs/PROVENANCE.md](docs/PROVENANCE.md). Plan of record: [docs/BACKLOG.md](docs/BACKLOG.md). Track rationale: [docs/TRACKS.md](docs/TRACKS.md).
@@ -134,9 +139,10 @@ These are the owner's figures, read from the XAUConnect production database on 2
 | `MOCK=1` quotes | Simulated fees, offline tests only |
 | Deposit flow (unsigned instructions) | Built and tested against stubs and mock. Off by default. No deposit address has ever been requested (`dry:false` never sent) and no funds moved. 1Click has no testnet, so the first real deposit has to be a small one the owner runs by hand |
 | Wallet signing | Not in this repo. In XAUConnect the user's own wallet signs (`deposit.ts` in patch 0002); type-checked and smoke-built, not run with a wallet |
-| XAUConnect venue adapter | Built and tested here (same bytes as patch 0001); not yet applied to XAUConnect |
-| XAUConnect UI (status timeline, Fund-from-another-chain panel) | Written and type-checked (React 19 types); not run in the app |
-| Edits to existing XAUConnect files | Anchored snippets only (`INTEGRATION.md`), unverified against real code |
+| XAUConnect venue adapter + XAU-shaped handlers | Built and tested here (same bytes as patches 0001/0005); live dry quotes run through them; patches apply with `git am` onto copies of public main `73c354c`; backend and web type-check under XAUConnect's real tsconfig settings. Not yet applied in the real monorepo, and `pnpm typecheck/build` not yet run there |
+| XAUConnect UI (status timeline, Fund-from-another-chain panel) | Written and type-checked; not rendered or run in the app |
+| Hand edits to existing XAUConnect files | Anchors checked against public main `73c354c`; not applied |
+| Hosted demo | `DEMO_PUBLIC=1` mode built, tested and run locally against live dry quotes; not deployed |
 
 ## Setup
 ```sh
