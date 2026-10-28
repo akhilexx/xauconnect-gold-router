@@ -1,0 +1,15 @@
+{
+  "name": "xauconnect-intents-router",
+  "version": "0.1.0",
+  "description": "Multi-chain gold routing for XAUConnect on NEAR Intents (1Click API). Dry-run quotes, policy guardrails, agent-friendly HTTP API.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=23.6" },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "start": "node src/server.ts",
+    "demo": "MOCK=1 node src/cli.ts plan --from 100:USDC:arb:0x0000000000000000000000000000000000000001 --from 60:USDT:eth:0x0000000000000000000000000000000000000001 --to XAUT:eth:DESTINATION_CHAIN:0x0000000000000000000000000000000000000001 --to XAUT:eth:INTENTS:demo.near",
+    "plan": "node src/cli.ts plan",
+    "tokens": "node src/cli.ts tokens"
+  }
+}
